@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chi tiết trận — Esports Hub</title>
+    <meta name="description" content="Chỉ số realtime của một trận League of Legends esports." />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>🎮</text></svg>" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./">Esports Hub <span>· LoL</span></a>
+      <form class="lookup" id="lookup">
+        <input
+          id="match-id"
+          name="match"
+          placeholder="Dán ID trận khác…"
+          aria-label="ID trận"
+          inputmode="numeric"
+          pattern="[0-9]+"
+          required
+        />
+        <button type="submit">Mở</button>
+      </form>
+    </header>
+
+    <main>
+      <p id="status" class="status">Đang tải…</p>
+
+      <section class="card match-head" id="head" hidden></section>
+      <nav class="games" id="games" role="tablist" aria-label="Chọn ván" hidden></nav>
+      <section class="card chart-card" id="chart" hidden></section>
+      <section class="card" id="compare" hidden></section>
+      <section class="card" id="players" hidden></section>
+    </main>
+
+    <script type="module" src="./assets/match-page.js"></script>
+    <script type="module">
+      document.getElementById('lookup').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('match-id').value.trim();
+        if (id) location.href = `./match.html?match=${encodeURIComponent(id)}`;
+      });
+    </script>
+  </body>
+</html>

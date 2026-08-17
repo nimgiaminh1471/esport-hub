@@ -1,0 +1,16 @@
+{
+  "name": "esports-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack bot + trang realtime cho esports (LoL trước, mở rộng game khác sau)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "smoke": "node --env-file-if-exists=.env src/providers/lol.js --smoke",
+    "notify": "node --env-file-if-exists=.env src/notify.js",
+    "notify:dry": "DRY_RUN=1 node --env-file-if-exists=.env src/notify.js",
+    "serve": "python3 -m http.server 8080 --directory docs"
+  }
+}

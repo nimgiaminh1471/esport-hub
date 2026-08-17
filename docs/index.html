@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Esports Hub — lịch thi đấu LoL</title>
+    <meta name="description" content="Lịch thi đấu và chỉ số realtime các trận League of Legends esports." />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>🎮</text></svg>" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./">Esports Hub <span>· LoL</span></a>
+      <form class="lookup" id="lookup">
+        <input
+          id="match-id"
+          name="match"
+          placeholder="Dán ID trận…"
+          aria-label="ID trận"
+          inputmode="numeric"
+          pattern="[0-9]+"
+          required
+        />
+        <button type="submit">Mở</button>
+      </form>
+    </header>
+
+    <main>
+      <p id="status" class="status">Đang tải lịch thi đấu…</p>
+
+      <section class="card" id="live" hidden>
+        <header><h2>Đang diễn ra</h2></header>
+        <div class="match-list" id="live-list"></div>
+      </section>
+
+      <section class="card" id="upcoming" hidden>
+        <header>
+          <h2>Sắp diễn ra</h2>
+          <span class="spacer"></span>
+          <label class="eyebrow" for="hours">Trong</label>
+          <select id="hours">
+            <option value="6">6 giờ</option>
+            <option value="12">12 giờ</option>
+            <option value="24" selected>24 giờ</option>
+            <option value="48">48 giờ</option>
+          </select>
+        </header>
+        <div class="match-list" id="upcoming-list"></div>
+      </section>
+
+      <p class="notice">
+        Nguồn: API esports công khai của Riot. Chỉ số trong trận trễ khoảng 3,5 phút so với sóng
+        trực tiếp — đây là giới hạn Riot đặt ra để chống ăn gian, không phải lỗi trang.
+      </p>
+    </main>
+
+    <script type="module" src="./assets/index-page.js"></script>
+    <script type="module">
+      document.getElementById('lookup').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('match-id').value.trim();
+        if (id) location.href = `./match.html?match=${encodeURIComponent(id)}`;
+      });
+    </script>
+  </body>
+</html>

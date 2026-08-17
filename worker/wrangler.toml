@@ -1,0 +1,11 @@
+name = "esports-hub-slack"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# Sửa thành URL GitHub Pages thật của bạn, không có dấu / ở cuối.
+[vars]
+PAGES_BASE_URL = "https://<user>.github.io/esports-hub"
+
+# SLACK_SIGNING_SECRET là secret, KHÔNG đặt ở đây. Nạp bằng:
+#   npx wrangler secret put SLACK_SIGNING_SECRET
+# Khi chạy `wrangler dev`, đặt trong worker/.dev.vars (file này đã bị .gitignore).

@@ -1,0 +1,754 @@
+/**
+ * Bảng màu lấy từ bộ token đã validate cho nền tối (surface #1a1a19):
+ *   blue #3987e5 ↔ red #e66767 — cặp diverging, CVD ΔE 19.2 (protan), tương phản > 3:1.
+ * Trang cố ý chỉ có một chế độ tối: dashboard esports gần như luôn xem cạnh
+ * stream trong phòng tối, và hai màu phe xanh/đỏ là quy ước của game nên không
+ * đảo theo theme được.
+ */
+:root {
+  color-scheme: dark;
+
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #222220;
+
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+
+  --blue: #3987e5;
+  --red: #e66767;
+  --gold: #c98500;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+
+  --radius: 10px;
+  --gap: 20px;
+
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------------ topbar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  font-weight: 600;
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.brand span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.lookup {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+input,
+button,
+select {
+  font: inherit;
+  color: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 7px 12px;
+}
+
+input {
+  min-width: 210px;
+}
+
+input::placeholder {
+  color: var(--muted);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover,
+input:focus,
+button:focus-visible {
+  border-color: var(--muted);
+  outline: none;
+}
+
+/* -------------------------------------------------------------------- shell */
+
+main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.card > header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.card h2 {
+  font-size: 15px;
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+.status--error {
+  color: var(--critical);
+}
+
+/* ------------------------------------------------------------------ badges */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.badge--live {
+  color: var(--ink);
+}
+
+.badge--live::before {
+  background: var(--good);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.badge--upcoming::before {
+  background: var(--gold);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge--live::before {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------- match header */
+
+.match-head .league {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.scoreline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--gap);
+}
+
+.team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.team--red {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.team img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.team .name {
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team .record {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Hero figure — tỉ số series. Dùng chữ số tỉ lệ (không tabular) theo spec. */
+.score {
+  font-size: 48px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.score .sep {
+  color: var(--muted);
+  margin: 0 8px;
+  font-weight: 400;
+}
+
+.score .win {
+  color: var(--ink);
+}
+
+.score .lose {
+  color: var(--muted);
+}
+
+.match-head .meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* -------------------------------------------------------------- game tabs */
+
+.games {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.games button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+}
+
+.games button[aria-selected="true"] {
+  border-color: var(--ink-2);
+  background: var(--surface-2);
+}
+
+.games button::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--axis);
+}
+
+.games button[data-state="inProgress"]::before {
+  background: var(--good);
+}
+
+.games button[data-state="completed"]::before {
+  background: var(--muted);
+}
+
+/* ------------------------------------------------------------------- chart */
+
+.chart-card figure {
+  margin: 0;
+}
+
+.chart-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.card > header .spacer {
+  margin-left: auto;
+}
+
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+.chart-tip b {
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+/* -------------------------------------------------------- so sánh hai đội */
+
+.compare-row {
+  display: grid;
+  grid-template-columns: 68px 1fr 68px;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--grid);
+}
+
+.compare-row:first-of-type {
+  border-top: none;
+}
+
+.compare-row .v {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-row .v--red {
+  text-align: right;
+}
+
+.compare-row .mid {
+  text-align: center;
+}
+
+.compare-row .label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Thanh chia tỉ lệ: 2px khe màu nền ngăn hai mảng, không dùng viền. */
+.split {
+  display: flex;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--grid);
+  gap: 2px;
+}
+
+.split i {
+  display: block;
+  border-radius: 3px;
+}
+
+.split .b {
+  background: var(--blue);
+}
+
+.split .r {
+  background: var(--red);
+}
+
+.dragons {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.chips {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.chips--r {
+  justify-content: flex-end;
+}
+
+/* Gạch màu bên trái/phải cho biết chip thuộc phe nào. */
+.chips--b .chip {
+  border-left: 3px solid var(--blue);
+}
+
+.chips--r .chip {
+  border-right: 3px solid var(--red);
+}
+
+.chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------------------ tables */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 8px 9px;
+  white-space: nowrap;
+}
+
+td {
+  padding: 8px;
+  border-top: 1px solid var(--grid);
+  vertical-align: middle;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.side-head:first-child {
+  margin-top: 0;
+}
+
+.side-head i {
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.side-head .b {
+  background: var(--blue);
+}
+
+.side-head .r {
+  background: var(--red);
+}
+
+.champ {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 168px;
+}
+
+.champ img {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--surface-2);
+}
+
+.champ .who {
+  min-width: 0;
+}
+
+.champ .player {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.champ .role {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.items {
+  display: flex;
+  gap: 2px;
+}
+
+.items i {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  display: block;
+  background-size: cover;
+  flex-shrink: 0;
+}
+
+.hp {
+  width: 60px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--grid);
+  overflow: hidden;
+}
+
+.hp i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--good);
+}
+
+.dmg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.dmg .bar {
+  width: 46px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--grid);
+  overflow: hidden;
+}
+
+.dmg .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+/* ---------------------------------------------------------- danh sách trận */
+
+.match-list {
+  display: grid;
+  gap: 10px;
+}
+
+.match-item {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.match-item:hover,
+.match-item:focus-visible {
+  border-color: var(--muted);
+  outline: none;
+}
+
+.match-item .when {
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-item .when small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.match-item .versus {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.versus-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.match-item .versus img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.match-item .vs {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.match-item .t {
+  font-weight: 600;
+}
+
+.match-item .league-tag {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 6px 0;
+}
+
+/* ---------------------------------------------------------------- mobile */
+
+@media (max-width: 720px) {
+  main,
+  .topbar {
+    padding: 16px;
+  }
+
+  .scoreline {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .team,
+  .team--red {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .lookup {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .lookup input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .match-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

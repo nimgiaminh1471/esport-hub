@@ -1,0 +1,60 @@
+name: Thông báo lịch thi đấu
+
+on:
+  schedule:
+    # Cron của GitHub thường trễ 5–15 phút lúc hệ thống tải cao. Bot không dựa
+    # vào việc chạy đúng giờ: nó so trạng thái với state/announced.json, nên cron
+    # trễ chỉ làm tin đến muộn chứ không gửi trùng hay bỏ sót.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# Hai lần chạy chồng nhau sẽ đọc cùng một state cũ và gửi tin hai lần.
+# Xếp hàng thay vì huỷ, để không mất lần chạy nào.
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Quét lịch và gửi Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          PAGES_BASE_URL: ${{ vars.PAGES_BASE_URL }}
+          LEAD_MINUTES: ${{ vars.LEAD_MINUTES || '30' }}
+        run: node src/notify.js
+
+      - name: Ghi lại trạng thái đã thông báo
+        run: |
+          if [[ -z "$(git status --porcelain state/)" ]]; then
+            echo "state không đổi, không cần commit"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add state/
+          git commit -m 'chore: cập nhật trạng thái thông báo [skip ci]'
+
+          # Lần chạy khác có thể vừa push xong; rebase rồi thử lại thay vì hỏng job.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push thất bại (lần $attempt), rebase rồi thử lại"
+            git pull --rebase --autostash
+          done
+          echo "::error::Không push được state sau 3 lần thử"
+          exit 1

@@ -1,0 +1,6 @@
+{
+  "_comment": "mode 'all' = thông báo tất cả giải, trừ các slug trong exclude. mode 'include' = chỉ các slug trong include.",
+  "mode": "all",
+  "exclude": [],
+  "include": ["worlds", "msi", "lck", "lpl", "lec", "lcs", "vcs", "lcp"]
+}
