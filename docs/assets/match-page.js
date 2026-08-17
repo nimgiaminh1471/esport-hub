@@ -4,7 +4,7 @@ import { loadAssets } from './ddragon.js';
 import { renderGoldDiffChart } from './chart.js';
 import {
   el, clear, img, setStatus, stateBadge, dateTimeVN, relativeVN,
-  compactGold, percent, ROLE_VN, DRAGON_VN,
+  compactGold, percent, ROLE_VN, DRAGON_VN, LANE_ORDER,
 } from './ui.js';
 
 const GAME_POLL_MS = 10_000;
@@ -29,6 +29,10 @@ const state = {
   assets: null,
   chart: null,
   timers: [],
+  // Kiểu xem do người dùng chọn, phải nằm ở state vì render() dựng lại DOM mỗi
+  // 10 giây — giữ trong DOM thì cứ đến nhịp poll là bị bật về mặc định.
+  chartView: 'chart',
+  playersView: 'lane',
 };
 
 boot().catch((err) => setStatus(dom.status, `Không tải được trận: ${err.message}`, true));
@@ -314,21 +318,20 @@ function renderChart() {
   const { blue, red } = sides();
   const blueName = blue.team?.code ?? 'Xanh';
   const redName = red.team?.code ?? 'Đỏ';
+  const showTable = state.chartView === 'table';
 
   const wrap = el('div', { class: 'chart-wrap' });
+  wrap.hidden = showTable;
   const table = buildChartTable(blueName, redName);
-  table.hidden = true;
+  table.hidden = !showTable;
 
   const toggle = el('button', {
     type: 'button',
-    text: 'Xem dạng bảng',
-    'aria-expanded': 'false',
+    text: showTable ? 'Xem dạng biểu đồ' : 'Xem dạng bảng',
+    'aria-expanded': String(showTable),
     onclick: () => {
-      const showTable = table.hidden;
-      table.hidden = !showTable;
-      wrap.hidden = showTable;
-      toggle.textContent = showTable ? 'Xem dạng biểu đồ' : 'Xem dạng bảng';
-      toggle.setAttribute('aria-expanded', String(showTable));
+      state.chartView = showTable ? 'chart' : 'table';
+      renderChart();
     },
   });
 
@@ -379,20 +382,193 @@ function buildChartTable(blueName, redName) {
 
 function renderPlayers() {
   const { blue, red } = sides();
+  const showTable = state.playersView === 'table';
+
+  const toggle = el('button', {
+    type: 'button',
+    text: showTable ? 'Xem dạng đối đầu' : 'Xem dạng bảng',
+    'aria-expanded': String(showTable),
+    onclick: () => {
+      state.playersView = showTable ? 'lane' : 'table';
+      renderPlayers();
+    },
+  });
+
   clear(dom.players).append(
-    el('header', {}, [el('h2', { text: 'Người chơi' })]),
-    ...[
-      ['b', blue, 'var(--blue)'],
-      ['r', red, 'var(--red)'],
-    ].flatMap(([cls, side, color]) => [
-      el('div', { class: 'side-head' }, [
-        el('i', { class: cls }),
-        side.team?.name ?? (cls === 'b' ? 'Đội xanh' : 'Đội đỏ'),
-      ]),
-      playerTable(side, color),
+    el('header', {}, [
+      el('h2', { text: 'Người chơi' }),
+      el('span', { class: 'spacer' }),
+      toggle,
     ]),
+    showTable ? playerTables(blue, red) : laneMatchups(blue, red),
   );
   dom.players.hidden = false;
+}
+
+const sideName = (side, cls) => side.team?.name ?? (cls === 'b' ? 'Đội xanh' : 'Đội đỏ');
+
+/* ------------------------------------------------- đối đầu từng đường */
+
+/**
+ * Ghép người chơi hai phe theo đường, xếp đối xứng quanh một cột giữa để so
+ * sánh trực tiếp: mọi chỉ số của phe đỏ nằm cùng khoảng cách tới trục giữa như
+ * chỉ số cùng loại của phe xanh, nên đọc ngang là ra ai hơn ai.
+ */
+function laneMatchups(blue, red) {
+  const pairs = lanePairs(blue, red);
+
+  // Một thang chung cho cả 5 đường để so được "đường nào chênh nhiều nhất".
+  // Chặn dưới 800 vàng để mấy phút đầu, khi chênh lệch mới vài chục vàng, thanh
+  // không bị kéo dài hết cỡ làm tưởng là đang thắng đậm.
+  const scale = Math.max(800, ...pairs.map((p) => Math.abs(goldDiff(p))));
+  const maxDamage = Math.max(
+    0.01,
+    ...[...blue.participants, ...red.participants].map((p) => p.championDamageShare ?? 0),
+  );
+
+  return el('div', { class: 'lanes' }, [
+    el('div', { class: 'lane-row lane-row--head' }, [
+      laneTeamHead(blue, 'b'),
+      el('div', { class: 'lane-mid lane-label', text: 'Chênh lệch vàng' }),
+      laneTeamHead(red, 'r'),
+    ]),
+    ...pairs.map((pair) =>
+      el('div', { class: 'lane-row' }, [
+        lanePlayer(pair.blue, 'b', { maxDamage }),
+        laneMid(pair, scale),
+        lanePlayer(pair.red, 'r', { maxDamage }),
+      ]),
+    ),
+  ]);
+}
+
+const goldDiff = (pair) => (pair.blue?.totalGold ?? 0) - (pair.red?.totalGold ?? 0);
+
+/**
+ * Feed trả `role` cho từng người, nhưng đây là API nội bộ nên không chắc lúc nào
+ * cũng đủ 5 vai khác nhau mỗi phe. Thiếu hoặc lạ thì ghép theo thứ tự để không
+ * người chơi nào bị rơi khỏi bảng.
+ */
+function lanePairs(blue, red) {
+  const byRole = (side) => {
+    const map = new Map();
+    for (const p of side.participants) if (!map.has(p.role)) map.set(p.role, p);
+    return map;
+  };
+  const b = byRole(blue);
+  const r = byRole(red);
+
+  if (LANE_ORDER.every((role) => b.has(role) && r.has(role))) {
+    return LANE_ORDER.map((role) => ({ role, blue: b.get(role), red: r.get(role) }));
+  }
+
+  const rows = Math.max(blue.participants.length, red.participants.length);
+  return Array.from({ length: rows }, (_, i) => ({
+    role: blue.participants[i]?.role ?? red.participants[i]?.role ?? '—',
+    blue: blue.participants[i] ?? null,
+    red: red.participants[i] ?? null,
+  }));
+}
+
+function laneTeamHead(side, cls) {
+  return el('div', { class: `lane-side lane-side--${cls}` }, [
+    el('div', { class: 'lane-team' }, [el('i', { class: cls }), sideName(side, cls)]),
+    el('div', { class: 'lane-gold lane-gold--head', text: 'Vàng' }),
+  ]);
+}
+
+/** Cột giữa: tên đường + chênh lệch vàng của cặp, thanh mọc về phía đang dẫn. */
+function laneMid(pair, scale) {
+  const diff = goldDiff(pair);
+  const leader = diff === 0 ? null : diff > 0 ? 'b' : 'r';
+  const name = leader === 'b' ? pair.blue?.summonerName : pair.red?.summonerName;
+
+  // Nửa track = 50%, nên |diff|/scale được ánh xạ vào đúng một nửa.
+  const width = Math.min(50, (Math.abs(diff) / scale) * 50);
+
+  return el('div', { class: 'lane-mid' }, [
+    el('div', { class: 'lane-label', text: ROLE_VN[pair.role] ?? pair.role }),
+    el('div', {
+      class: `lane-diff${leader ? ` lane-diff--${leader}` : ''}`,
+      text: leader ? compactGold(Math.abs(diff)) : '0',
+      title: leader
+        ? `${name} hơn ${Math.abs(diff).toLocaleString('vi-VN')} vàng`
+        : 'Hai bên đang bằng vàng',
+    }),
+    el('div', { class: 'lane-track' }, [
+      leader
+        ? el('i', {
+            class: leader,
+            // Mọc từ vạch giữa: phe xanh sang trái, phe đỏ sang phải.
+            style: leader === 'b' ? `right:50%;width:${width}%` : `left:50%;width:${width}%`,
+          })
+        : null,
+    ]),
+  ]);
+}
+
+function lanePlayer(p, cls, { maxDamage }) {
+  if (!p) return el('div', { class: `lane-side lane-side--${cls} lane-side--empty`, text: '—' });
+
+  const { assets } = state;
+  const keystone = assets.keystone(p.perks);
+  const hpPercent = p.maxHealth ? (p.currentHealth / p.maxHealth) * 100 : 0;
+  const share = p.championDamageShare ?? 0;
+
+  return el('div', { class: `lane-side lane-side--${cls}` }, [
+    el('div', { class: 'lane-portrait' }, [
+      img(assets.champion(p.championId), { alt: p.championId, title: p.championId }),
+      el('span', { class: 'lv', text: p.level, title: `Cấp ${p.level}` }),
+      el('div', { class: 'hp', title: `Máu ${p.currentHealth}/${p.maxHealth}` }, [
+        el('i', { style: `width:${hpPercent}%` }),
+      ]),
+    ]),
+    el('div', { class: 'lane-info' }, [
+      el('div', { class: 'lane-name' }, [
+        keystone ? img(keystone.icon, { alt: '', title: keystone.name, width: 17, height: 17 }) : null,
+        el('span', { class: 'player', text: p.summonerName }),
+        el('span', { class: 'champ-name', text: p.championId }),
+      ]),
+      el('div', { class: 'lane-stats' }, [
+        el('span', { text: `${p.kills}/${p.deaths}/${p.assists}`, title: 'Hạ gục / tử vong / hỗ trợ' }),
+        el('span', { text: `${p.creepScore} lính`, title: 'Số lính hạ được' }),
+        el('span', { class: 'lane-dmg', title: 'Tỉ lệ sát thương lên tướng trong đội' }, [
+          el('span', { text: percent(p.championDamageShare) }),
+          el('span', { class: 'bar' }, [
+            el('i', { style: `width:${(share / maxDamage) * 100}%;background:var(--${cls === 'b' ? 'blue' : 'red'})` }),
+          ]),
+        ]),
+        el('span', { text: `${p.wardsPlaced ?? '—'} mắt`, title: 'Mắt đã đặt' }),
+      ]),
+      itemRow(p),
+    ]),
+    el('div', {
+      class: 'lane-gold',
+      text: compactGold(p.totalGold),
+      title: `${p.totalGold.toLocaleString('vi-VN')} vàng`,
+    }),
+  ]);
+}
+
+/** 6 ô trang bị + 1 ô mắt/trinket, luôn cố định để các hàng thẳng cột. */
+function itemRow(p) {
+  return el('div', { class: 'items' }, Array.from({ length: 7 }, (_, i) => {
+    const url = state.assets.item(p.items[i]);
+    return el('i', { style: url ? `background-image:url(${url})` : null });
+  }));
+}
+
+/* ------------------------------------------------------- dạng bảng đầy đủ */
+
+/** Bản song sinh dạng bảng: mỗi phe một bảng, đọc được bằng trình đọc màn hình. */
+function playerTables(blue, red) {
+  return el('div', {}, [
+    ['b', blue, 'var(--blue)'],
+    ['r', red, 'var(--red)'],
+  ].flatMap(([cls, side, color]) => [
+    el('div', { class: 'side-head' }, [el('i', { class: cls }), sideName(side, cls)]),
+    playerTable(side, color),
+  ]));
 }
 
 function playerTable(side, color) {
@@ -437,13 +613,7 @@ function playerTable(side, color) {
               el('i', { style: `width:${hpPercent}%` }),
             ]),
           ]),
-          el('td', {}, [
-            // 6 ô trang bị + 1 ô mắt/trinket, luôn cố định để các hàng thẳng cột.
-            el('div', { class: 'items' }, Array.from({ length: 7 }, (_, i) => {
-              const url = assets.item(p.items[i]);
-              return el('i', { style: url ? `background-image:url(${url})` : null });
-            })),
-          ]),
+          el('td', {}, [itemRow(p)]),
           el('td', { class: 'num' }, [
             el('div', { class: 'dmg' }, [
               el('span', { text: percent(p.championDamageShare) }),

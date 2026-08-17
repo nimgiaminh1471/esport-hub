@@ -80,6 +80,9 @@ export const ROLE_VN = {
   support: 'Hỗ trợ',
 };
 
+/** Thứ tự đường từ trên xuống, dùng để ghép cặp đối đầu hai phe. */
+export const LANE_ORDER = ['top', 'jungle', 'mid', 'bottom', 'support'];
+
 export const DRAGON_VN = {
   infernal: 'Hoả',
   ocean: 'Thuỷ',
