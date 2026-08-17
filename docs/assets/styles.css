@@ -650,9 +650,19 @@ th.num {
    xanh. Nhờ đó đọc ngang một hàng là so được từng cặp, đọc dọc một cột là so
    được cả 5 đường — không cần nhảy qua lại giữa hai bảng rời. */
 
+.lanes {
+  /* Mọi cột đều rộng cố định để hai phe soi gương được và để các hàng thẳng cột
+     theo chiều dọc. Phần thừa của khung đẩy ra hai bên ngoài, không chen vào
+     giữa, nhờ vậy cột vàng luôn nằm sát ngay chênh lệch ở trục giữa. */
+  --portrait: 44px;
+  --info: 264px;
+  --gold: 54px;
+  --lane-gap: 10px;
+}
+
 .lane-row {
   display: grid;
-  grid-template-columns: 1fr 132px 1fr;
+  grid-template-columns: 1fr 190px 1fr;
   align-items: center;
   gap: 12px;
   padding: 10px 0;
@@ -668,16 +678,20 @@ th.num {
 .lane-side {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--lane-gap);
   min-width: 0;
+  justify-content: flex-end;
 }
 
-/* Lật toàn bộ phe đỏ để thành ảnh gương của phe xanh. */
+/* Lật toàn bộ phe đỏ để thành ảnh gương của phe xanh. Với row-reverse thì
+   flex-start mới là phía trục giữa. */
 .lane-side--r {
   flex-direction: row-reverse;
+  justify-content: flex-start;
   text-align: right;
 }
 
+.lane-side--r .lane-team,
 .lane-side--r .lane-name,
 .lane-side--r .lane-stats,
 .lane-side--r .lane-dmg,
@@ -690,35 +704,54 @@ th.num {
   justify-content: center;
 }
 
+/* Cùng bề rộng với chân dung + khối chữ, để tên đội thẳng cột với chân dung. */
 .lane-team {
   display: flex;
   align-items: center;
   gap: 9px;
-  flex: 1;
+  flex: 0 1 calc(var(--portrait) + var(--lane-gap) + var(--info));
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
+}
+
+/* Tên đội ăn hết phần thừa để nhãn đơn vị bị đẩy sát trục giữa, thẳng cột với
+   số lính bên dưới — không phụ thuộc chiều lật của phe. */
+.lane-team .nm {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lane-unit {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* --- chân dung: cấp độ dán vào góc trong, thanh máu nằm dưới ------------- */
 
 .lane-portrait {
   position: relative;
-  width: 44px;
+  width: var(--portrait);
   flex-shrink: 0;
 }
 
 .lane-portrait img {
   display: block;
-  width: 44px;
-  height: 44px;
+  width: var(--portrait);
+  height: var(--portrait);
   border-radius: 8px;
   background: var(--surface-2);
 }
 
 .lane-portrait .lv {
   position: absolute;
-  top: 33px;
+  top: calc(var(--portrait) - 11px);
   right: -5px;
   min-width: 19px;
   padding: 0 3px;
@@ -745,7 +778,7 @@ th.num {
 /* --- khối chữ: tên / chỉ số / trang bị ---------------------------------- */
 
 .lane-info {
-  flex: 1;
+  flex: 0 1 var(--info);
   min-width: 0;
   display: grid;
   gap: 5px;
@@ -774,18 +807,55 @@ th.num {
   white-space: nowrap;
 }
 
+/* Lính: số trần, không đơn vị (đơn vị nằm ở hàng tiêu đề), đẩy sát cột vàng để
+   hai số kinh tế của một người nằm cạnh nhau. */
+.lane-name .cs {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lane-side--r .lane-name .cs {
+  margin-left: 0;
+  margin-right: auto;
+}
+
 .lane-stats {
   gap: 12px;
-  color: var(--ink-2);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Bề rộng tối thiểu cố định cho từng ô: đọc dọc một cột là so được cả 5 đường,
+   không bị lệch vì "0/0/4" ngắn hơn "10/12/14". */
+.lane-stats > * {
+  flex-shrink: 0;
+}
+
+.lane-stats .wards {
+  min-width: 42px;
+}
+
+.lane-stats .kda {
+  margin-left: auto;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lane-side--r .lane-stats .kda {
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .lane-dmg {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-width: 70px;
 }
 
 .lane-dmg .bar {
@@ -813,7 +883,7 @@ th.num {
 
 .lane-gold {
   flex-shrink: 0;
-  min-width: 54px;
+  min-width: var(--gold);
   text-align: right;
   font-size: 15px;
   font-weight: 600;
@@ -978,6 +1048,96 @@ th.num {
 
 /* ---------------------------------------------------------------- mobile */
 
+/* Dưới ~960px, ba cột không đủ chỗ cho một hàng chỉ số nên xếp dọc: nhãn đường
+   và chênh lệch lên đầu, hai người chơi nằm dưới và cùng canh trái. Giữ kiểu
+   gương ở màn hẹp sẽ rối hơn là giúp so sánh, nên đổi sang gạch màu bên trái để
+   biết ai thuộc phe nào. */
+@media (max-width: 960px) {
+  .lane-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px 0;
+  }
+
+  .lane-mid {
+    order: -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+  }
+
+  .lane-mid .lane-track {
+    flex: 1;
+    margin: 0;
+  }
+
+  .lane-side {
+    border-left: 3px solid var(--blue);
+    padding-left: 10px;
+    justify-content: flex-start;
+  }
+
+  /* Xếp dọc thì không cần cột cố định nữa: cho khối chữ giãn hết bề ngang. */
+  .lane-info,
+  .lane-team {
+    flex: 1 1 auto;
+  }
+
+  .lane-side--r,
+  .lane-side--r .lane-name,
+  .lane-side--r .lane-stats,
+  .lane-side--r .lane-dmg,
+  .lane-side--r .items {
+    flex-direction: row;
+  }
+
+  .lane-side--r {
+    border-left-color: var(--red);
+    text-align: left;
+  }
+
+  .lane-side--r .lane-gold {
+    text-align: right;
+  }
+
+  /* Hết lật thì hai số chính của phe đỏ cũng dạt về phải như phe xanh. */
+  .lane-side--r .lane-name .cs,
+  .lane-side--r .lane-stats .kda {
+    margin-left: auto;
+    margin-right: 0;
+  }
+
+  .lane-side--r .lane-portrait .lv {
+    left: auto;
+    right: -5px;
+  }
+
+  /* Hàng tiêu đề vẫn cần hai tên đội cạnh nhau để biết màu nào là đội nào. */
+  .lane-row--head {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Xếp dọc thì các cột không còn soi gương nên nhãn đơn vị chẳng thẳng với số
+     nào, mà lại đứng cạnh nhau thành "LÍNH LÍNH". Bỏ, để lại tooltip. */
+  .lane-row--head .lane-mid,
+  .lane-gold--head,
+  .lane-unit {
+    display: none;
+  }
+
+  .lane-row--head .lane-side {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  .lane-row--head .lane-side--r {
+    flex-direction: row-reverse;
+    text-align: right;
+  }
+}
+
 @media (max-width: 720px) {
   main,
   .topbar {
@@ -1009,5 +1169,11 @@ th.num {
   .match-item {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  /* Hết chỗ cho một hàng chỉ số; xuống dòng được vì đã bỏ kiểu gương. */
+  .lane-stats {
+    flex-wrap: wrap;
+    gap: 6px 12px;
   }
 }

@@ -429,7 +429,7 @@ function laneMatchups(blue, red) {
   return el('div', { class: 'lanes' }, [
     el('div', { class: 'lane-row lane-row--head' }, [
       laneTeamHead(blue, 'b'),
-      el('div', { class: 'lane-mid lane-label', text: 'Chênh lệch vàng' }),
+      el('div', { class: 'lane-mid lane-label', text: 'Chênh lệch' }),
       laneTeamHead(red, 'r'),
     ]),
     ...pairs.map((pair) =>
@@ -472,7 +472,13 @@ function lanePairs(blue, red) {
 
 function laneTeamHead(side, cls) {
   return el('div', { class: `lane-side lane-side--${cls}` }, [
-    el('div', { class: 'lane-team' }, [el('i', { class: cls }), sideName(side, cls)]),
+    el('div', { class: 'lane-team' }, [
+      el('i', { class: cls }),
+      el('span', { class: 'nm', text: sideName(side, cls) }),
+      // Nhãn đơn vị cho hai cột số trần bên trong, đặt ở đây một lần thay vì
+      // gắn chữ "lính" vào từng hàng như bảng cũ.
+      el('span', { class: 'lane-unit', text: 'Lính' }),
+    ]),
     el('div', { class: 'lane-gold lane-gold--head', text: 'Vàng' }),
   ]);
 }
@@ -524,21 +530,29 @@ function lanePlayer(p, cls, { maxDamage }) {
       ]),
     ]),
     el('div', { class: 'lane-info' }, [
+      // Ba số chính (lính, K/D/A, vàng) làm nổi như bảng điểm trên sóng: số trần,
+      // không đơn vị, đậm hơn hẳn hai chỉ số phụ ở dưới.
       el('div', { class: 'lane-name' }, [
         keystone ? img(keystone.icon, { alt: '', title: keystone.name, width: 17, height: 17 }) : null,
         el('span', { class: 'player', text: p.summonerName }),
         el('span', { class: 'champ-name', text: p.championId }),
+        el('span', { class: 'cs', text: p.creepScore, title: `${p.creepScore} lính hạ được` }),
       ]),
+      // K/D/A nằm ngay dưới số lính, sát trục giữa như bảng điểm trên sóng; hai
+      // chỉ số phụ lùi ra phía ngoài.
       el('div', { class: 'lane-stats' }, [
-        el('span', { text: `${p.kills}/${p.deaths}/${p.assists}`, title: 'Hạ gục / tử vong / hỗ trợ' }),
-        el('span', { text: `${p.creepScore} lính`, title: 'Số lính hạ được' }),
         el('span', { class: 'lane-dmg', title: 'Tỉ lệ sát thương lên tướng trong đội' }, [
           el('span', { text: percent(p.championDamageShare) }),
           el('span', { class: 'bar' }, [
             el('i', { style: `width:${(share / maxDamage) * 100}%;background:var(--${cls === 'b' ? 'blue' : 'red'})` }),
           ]),
         ]),
-        el('span', { text: `${p.wardsPlaced ?? '—'} mắt`, title: 'Mắt đã đặt' }),
+        el('span', { class: 'wards', text: `${p.wardsPlaced ?? '—'} mắt`, title: 'Mắt đã đặt' }),
+        el('span', {
+          class: 'kda',
+          text: `${p.kills}/${p.deaths}/${p.assists}`,
+          title: 'Hạ gục / tử vong / hỗ trợ',
+        }),
       ]),
       itemRow(p),
     ]),
