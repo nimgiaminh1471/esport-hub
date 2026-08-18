@@ -32,7 +32,7 @@ export const TZ = 'Asia/Ho_Chi_Minh';
  * VN là 18:00 ngày 25 giờ UTC — xét theo UTC sẽ rơi nhầm kỳ, mà sai kiểu này thì
  * tới lúc chốt sổ mới phát hiện.
  */
-function partsVN(dateIso) {
+export function partsVN(dateIso) {
   const d = dateIso ? new Date(dateIso) : new Date();
   if (Number.isNaN(d.getTime())) throw new Error(`Mốc thời gian không hợp lệ: ${dateIso}`);
 

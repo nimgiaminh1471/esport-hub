@@ -1,3 +1,18 @@
 # Copy thành worker/.dev.vars để chạy `npx wrangler dev`.
 # Lấy ở Slack App -> Basic Information -> App Credentials -> Signing Secret.
 SLACK_SIGNING_SECRET=...
+
+# Để cron chốt sổ đăng được tổng kết cuối ngày vào kênh.
+# Bỏ trống thì cron vẫn chạy và vẫn ghi KV, chỉ không gửi Slack — tiện khi thử.
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL_ID=C0123ABCD
+
+# Khoá đọc mục "Dự đoán" của Binance.
+# Tạo ở Binance Developer Platform và PHẢI bật quyền "Prediction Trading".
+# Trước đó còn phải làm xong trong app Binance: KYC, tạo Prediction Account, và
+# Prediction SAS authorization — thiếu bước nào thì mọi request đều bị từ chối.
+BINANCE_API_KEY=...
+BINANCE_API_SECRET=...
+
+# Phần của đối tác trong lãi mỗi ngày, 0–1. Mặc định 0.5.
+DOI_TAC_SHARE=0.5

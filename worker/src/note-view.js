@@ -10,7 +10,8 @@
  * Kèm lợi ích phụ: cùng origin nên không cần CORS, và trang tự chứa nên không
  * phụ thuộc gì vào Pages.
  */
-import { signed } from './note-core.js';
+import { shiftPeriod, signed } from './note-core.js';
+import { dayLabel, fmt } from './day-core.js';
 
 /** Chuỗi do người dùng gõ (nhãn, ghi chú) phải escape trước khi nhét vào HTML. */
 const esc = (s) =>
@@ -45,13 +46,20 @@ td{padding:8px;border-top:1px solid var(--grid);vertical-align:middle}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .empty{color:var(--muted);font-size:14px;padding:6px 0;margin:0}
 .scroll{overflow-x:auto}
+/* Bảng đứng ngay dưới khối tổng kết thì hai đường kẻ dính vào nhau. */
+.row+.scroll,.row+.empty{margin-top:18px}
 `;
 
+/**
+ * `value` nhận CHUỖI đã định dạng sẵn, không phải số: sổ nhập tay dùng `signed`
+ * (số nguyên), phần theo ngày dùng `fmt` (số nguyên 1/100). Để hàm này tự đoán
+ * cách hiển thị là chuyện sớm muộn cũng in sai một trong hai.
+ */
 function summaryRow(label, value, meta, total = false) {
   return `<div class="row${total ? ' row--total' : ''}">
     <div class="k">${esc(label)}</div>
     <div class="m">${esc(meta)}</div>
-    <div class="v">${esc(signed(value))}</div>
+    <div class="v">${esc(value)}</div>
   </div>`;
 }
 
@@ -81,9 +89,30 @@ function detailRows(entries) {
   </table></div>`;
 }
 
+/** Bảng các ngày đã chốt trong tháng. */
+function dayRows(days) {
+  if (!days.length) return '<p class="empty">Tháng này chưa có ngày nào được chốt.</p>';
+
+  const body = days
+    .map(
+      (d) => `<tr>
+        <td>${esc(dayLabel(d.day))}</td>
+        <td class="n">${esc(fmt(d.profitUnits))}</td>
+        <td class="n">${esc(fmt(d.doiTacUnits))}</td>
+        <td class="n">${esc(fmt(d.minhUnits))}</td>
+      </tr>`,
+    )
+    .join('');
+
+  return `<div class="scroll"><table>
+    <thead><tr><th>Ngày</th><th class="n">Lãi</th><th class="n">Đối tác</th><th class="n">Còn lại</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`;
+}
+
 /** Trang tự chứa, không gọi ra ngoài, không script. */
 export function renderNotePage(snapshot) {
-  const { range, summary, entries, prev, next } = snapshot;
+  const { range, summary, entries, prev, next, ngay } = snapshot;
 
   return `<!doctype html>
 <html lang="vi"><head>
@@ -97,18 +126,31 @@ export function renderNotePage(snapshot) {
 
 <section class="card">
   <header>
-    <h2>Kỳ ${esc(range.label)}</h2>
+    <h2>Theo ngày · ${esc(ngay.month)}</h2>
+    <span class="spacer"></span>
+    <a href="?month=${esc(shiftPeriod(ngay.month, -1))}">‹ tháng trước</a>
+    <a href="?month=${esc(shiftPeriod(ngay.month, 1))}">tháng sau ›</a>
+  </header>
+  ${summaryRow('Lãi', fmt(ngay.total.profitUnits), `${ngay.total.days} ngày · ${ngay.total.count} vị thế`)}
+  ${summaryRow('Đối tác', fmt(ngay.total.doiTacUnits), `${ngay.total.wins} thắng · ${ngay.total.losses} thua`)}
+  ${summaryRow('Còn lại', fmt(ngay.total.minhUnits), '', true)}
+  ${dayRows(ngay.days)}
+</section>
+
+<section class="card">
+  <header>
+    <h2>Nhập tay · kỳ ${esc(range.label)}</h2>
     <span class="spacer"></span>
     <a href="?period=${esc(prev)}">‹ kỳ trước</a>
     <a href="?period=${esc(next)}">kỳ sau ›</a>
   </header>
-  ${summaryRow('Chung', summary.chung, `${summary.chungPlus} lần + · ${summary.chungMinus} lần −`)}
-  ${summaryRow('Riêng', summary.rieng, summary.riengList.map(signed).join(', '))}
-  ${summaryRow('Tổng', summary.tong, `${summary.count} dòng`, true)}
+  ${summaryRow('Chung', signed(summary.chung), `${summary.chungPlus} lần + · ${summary.chungMinus} lần −`)}
+  ${summaryRow('Riêng', signed(summary.rieng), summary.riengList.map(signed).join(', '))}
+  ${summaryRow('Tổng', signed(summary.tong), `${summary.count} dòng`, true)}
 </section>
 
 <section class="card">
-  <header><h2>Chi tiết</h2></header>
+  <header><h2>Chi tiết nhập tay</h2></header>
   ${detailRows(entries)}
 </section>
 

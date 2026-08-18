@@ -25,9 +25,11 @@ const DEFAULT_API = 'https://esports-hub-slack.esport-slack.workers.dev';
 const params = new URLSearchParams(location.search);
 const API = (params.get('api') || DEFAULT_API).replace(/\/+$/, '');
 const period = params.get('period');
+const month = params.get('month');
 
 const dom = {
   status: document.getElementById('status'),
+  days: document.getElementById('days'),
   sum: document.getElementById('sum'),
   rows: document.getElementById('rows'),
 };
@@ -44,14 +46,21 @@ function reportError(err) {
 }
 
 async function load() {
-  const url = `${API}/note.json${period ? `?period=${encodeURIComponent(period)}` : ''}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const q = new URLSearchParams();
+  if (period) q.set('period', period);
+  if (month) q.set('month', month);
+
+  const query = String(q);
+  const res = await fetch(`${API}/note.json${query ? `?${query}` : ''}`, {
+    signal: AbortSignal.timeout(15000),
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const data = await res.json();
   if (data.error) throw new Error(data.error);
 
   dom.status.hidden = true;
+  renderDays(data);
   renderSummary(data);
   renderRows(data);
 }
@@ -59,38 +68,112 @@ async function load() {
 /** `+7` / `-3` / `0` — luôn hiện dấu để đọc lướt biết ngay chiều. */
 const signed = (n) => (n > 0 ? `+${n}` : String(n));
 
-/** Giữ nguyên tham số đang có, chỉ đổi kỳ — để `?api=` không bị mất khi bấm qua lại. */
-function hrefFor(nextPeriod) {
+/**
+ * Số của phần theo ngày là SỐ NGUYÊN 1/100 (xem `SCALE` trong
+ * `worker/src/day-core.js`) nên phải chia trước khi hiển thị — dùng nhầm `signed`
+ * ở đây sẽ ra con số gấp trăm lần.
+ */
+const fmt = (units) => {
+  const n = (units ?? 0) / 100;
+  return `${n > 0 ? '+' : ''}${n.toFixed(2)}`;
+};
+
+/** `2026-08-19` -> `19/08` */
+const dayLabel = (day) => {
+  const [, m, d] = String(day).split('-');
+  return `${d}/${m}`;
+};
+
+/** `YYYY-MM` cộng/trừ tháng. Chỉ dùng cho hai nút bấm nên tính tại chỗ là đủ. */
+function shiftMonth(value, delta) {
+  const [y, m] = String(value).split('-').map(Number);
+  const total = y * 12 + (m - 1) + delta;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
+}
+
+/** Giữ nguyên tham số đang có, chỉ đổi một cái — để `?api=` không bị mất khi bấm qua lại. */
+function hrefFor(key, value) {
   const q = new URLSearchParams(location.search);
-  q.set('period', nextPeriod);
+  q.set(key, value);
   return `./note.html?${q}`;
 }
 
-function renderSummary({ range, summary, prev, next }) {
-  const line = (label, value, meta, total = false) =>
-    el('div', { class: `compare-row${total ? ' compare-row--total' : ''}` }, [
-      el('div', { class: 'v v--blue', text: label }),
-      el('div', { class: 'mid' }, [el('div', { class: 'label', text: meta ?? '' })]),
-      el('div', { class: 'v v--red', text: signed(value) }),
-    ]);
+/**
+ * Một dòng tổng kết. Nhận CHUỖI đã định dạng sẵn chứ không nhận số: sổ nhập tay
+ * dùng `signed`, phần theo ngày dùng `fmt`.
+ */
+const line = (label, text, meta, total = false) =>
+  el('div', { class: `compare-row${total ? ' compare-row--total' : ''}` }, [
+    el('div', { class: 'v v--blue', text: label }),
+    el('div', { class: 'mid' }, [el('div', { class: 'label', text: meta ?? '' })]),
+    el('div', { class: 'v v--red', text }),
+  ]);
 
+function renderDays({ ngay }) {
+  // Worker cũ chưa trả phần này thì ẩn hẳn thẻ, đừng ném lỗi — ném ở đây sẽ kéo
+  // sập cả trang, kể cả phần sổ nhập tay vốn chẳng liên quan gì.
+  if (!ngay) return;
+
+  const { month, days, total } = ngay;
+
+  clear(dom.days).append(
+    el('header', {}, [
+      el('h2', { text: `Theo ngày · ${month}` }),
+      el('span', { class: 'spacer' }),
+      el('a', { class: 'game-tab', href: hrefFor('month', shiftMonth(month, -1)), text: '‹ tháng trước' }),
+      el('a', { class: 'game-tab', href: hrefFor('month', shiftMonth(month, 1)), text: 'tháng sau ›' }),
+    ]),
+    line('Lãi', fmt(total.profitUnits), `${total.days} ngày · ${total.count} vị thế`),
+    line('Đối tác', fmt(total.doiTacUnits), `${total.wins} thắng · ${total.losses} thua`),
+    line('Còn lại', fmt(total.minhUnits), '', true),
+    days.length
+      ? el('div', { class: 'scroll-x' }, [
+          el('table', {}, [
+            el('thead', {}, [
+              el('tr', {}, [
+                el('th', { text: 'Ngày' }),
+                el('th', { class: 'num', text: 'Lãi' }),
+                el('th', { class: 'num', text: 'Đối tác' }),
+                el('th', { class: 'num', text: 'Còn lại' }),
+              ]),
+            ]),
+            el(
+              'tbody',
+              {},
+              days.map((d) =>
+                el('tr', {}, [
+                  el('td', { text: dayLabel(d.day) }),
+                  el('td', { class: 'num', text: fmt(d.profitUnits) }),
+                  el('td', { class: 'num', text: fmt(d.doiTacUnits) }),
+                  el('td', { class: 'num', text: fmt(d.minhUnits) }),
+                ]),
+              ),
+            ),
+          ]),
+        ])
+      : el('p', { class: 'empty', text: 'Tháng này chưa có ngày nào được chốt.' }),
+  );
+  dom.days.hidden = false;
+}
+
+function renderSummary({ range, summary, prev, next }) {
   clear(dom.sum).append(
     el('header', {}, [
-      el('h2', { text: `Kỳ ${range.label}` }),
+      el('h2', { text: `Nhập tay · kỳ ${range.label}` }),
       el('span', { class: 'spacer' }),
-      el('a', { class: 'game-tab', href: hrefFor(prev), text: '‹ kỳ trước' }),
-      el('a', { class: 'game-tab', href: hrefFor(next), text: 'kỳ sau ›' }),
+      el('a', { class: 'game-tab', href: hrefFor('period', prev), text: '‹ kỳ trước' }),
+      el('a', { class: 'game-tab', href: hrefFor('period', next), text: 'kỳ sau ›' }),
     ]),
-    line('Chung', summary.chung, `${summary.chungPlus} lần + · ${summary.chungMinus} lần −`),
-    line('Riêng', summary.rieng, summary.riengList.map(signed).join(', ')),
-    line('Tổng', summary.tong, `${summary.count} dòng`, true),
+    line('Chung', signed(summary.chung), `${summary.chungPlus} lần + · ${summary.chungMinus} lần −`),
+    line('Riêng', signed(summary.rieng), summary.riengList.map(signed).join(', ')),
+    line('Tổng', signed(summary.tong), `${summary.count} dòng`, true),
   );
   dom.sum.hidden = false;
 }
 
 function renderRows({ entries }) {
   clear(dom.rows).append(
-    el('header', {}, [el('h2', { text: 'Chi tiết' })]),
+    el('header', {}, [el('h2', { text: 'Chi tiết nhập tay' })]),
     entries.length
       ? el('div', { class: 'scroll-x' }, [
           el('table', {}, [

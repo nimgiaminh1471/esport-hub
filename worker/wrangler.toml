@@ -5,6 +5,18 @@ compatibility_date = "2026-08-01"
 # Sửa thành URL GitHub Pages thật của bạn, không có dấu / ở cuối.
 [vars]
 PAGES_BASE_URL = "https://nimgiaminh1471.github.io/esport-hub"
+# ID kênh nhận tổng kết cuối ngày (bấm tên kênh -> cuối popup có Channel ID).
+SLACK_CHANNEL_ID = ""
+# Phần của đối tác trong lãi mỗi ngày, 0–1. Đổi ở đây là áp cho các ngày CHỐT TỪ
+# ĐÂY VỀ SAU; ngày đã chốt giữ nguyên tỉ lệ đã lưu trong chính dòng đó.
+DOI_TAC_SHARE = "0.5"
+
+# Chốt sổ mỗi ngày một lần.
+# 17:05 UTC = 00:05 giờ VN, tức chốt cho ngày VỪA kết thúc chứ không phải ngày
+# đang chạy. Cron lỡ nhịp cũng không mất ngày nào: mỗi lượt rà ngược 7 ngày và
+# chốt bù những ngày còn thiếu (xem `settleBacklog` trong src/day.js).
+[triggers]
+crons = ["5 17 * * *"]
 
 # Kho dữ liệu cho sổ ghi chú. Tạo một lần rồi dán id vào đây:
 #   npx wrangler kv namespace create NOTE
@@ -13,6 +25,9 @@ PAGES_BASE_URL = "https://nimgiaminh1471.github.io/esport-hub"
 binding = "NOTE"
 id = "5e0f78a137764c9bb1718d02811bab9a"
 
-# SLACK_SIGNING_SECRET là secret, KHÔNG đặt ở đây. Nạp bằng:
-#   npx wrangler secret put SLACK_SIGNING_SECRET
+# Các secret KHÔNG đặt ở đây. Nạp từng cái bằng `npx wrangler secret put <TÊN>`:
+#   SLACK_SIGNING_SECRET   xác thực slash command
+#   SLACK_BOT_TOKEN        để cron đăng tổng kết vào kênh (scope chat:write)
+#   BINANCE_API_KEY        API key có bật quyền "Prediction Trading"
+#   BINANCE_API_SECRET     secret key đi kèm
 # Khi chạy `wrangler dev`, đặt trong worker/.dev.vars (file này đã bị .gitignore).
