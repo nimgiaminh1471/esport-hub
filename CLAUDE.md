@@ -117,8 +117,7 @@ League filtering lives in `docs/assets/leagues.js` — see below.
 ### `/note` — personal ledger, deliberately undiscoverable
 
 A private running tally, unrelated to the esports features. Entered with the `/note` slash
-command, stored in a **Cloudflare KV namespace** (`env.NOTE`), and viewed at
-`<worker-url>/note` — the Worker itself serves the HTML.
+command, stored in a **Cloudflare KV namespace** (`env.NOTE`), and viewable two ways.
 
 - **Data lives in KV, not in this repo** — that is the whole point. `worker/src/note.js` is the
   only file that touches it; `docs/assets/note-core.js` holds the pure maths so it is testable
@@ -133,11 +132,17 @@ command, stored in a **Cloudflare KV namespace** (`env.NOTE`), and viewed at
   never change retroactively.
 - Two independent columns, each carrying its own sign; neither is derivable from the other.
   `--r 10` with no sign means `+10` and does **not** inherit the row's direction.
-- **Nothing about this lives in `docs/`.** The view page is rendered by
-  `worker/src/note-view.js` and served at `GET /note` (raw JSON at `/note.json`). Putting it in
-  `docs/` would publish it to GitHub Pages at a guessable path, and would force hardcoding the
-  Worker URL — the `workers.dev` subdomain belongs to the Cloudflare account and cannot be
-  derived from anything in the repo. Serving from the Worker also removes the CORS need.
+- **Two view routes, deliberately.** `docs/note.html` on GitHub Pages (fetches
+  `<worker>/note.json`) and `<worker>/note` served straight from the Worker
+  (`worker/src/note-view.js`, self-contained HTML). The Pages one is the nicer URL; the Worker
+  one needs no configuration and is the fallback when the hardcoded URL is stale.
+- **`DEFAULT_API` in `docs/assets/note-page.js` must match the real Worker URL.** The
+  `workers.dev` subdomain belongs to the Cloudflare account and **cannot be derived from
+  anything in this repo** — do not guess it. It is printed at the end of `wrangler deploy`.
+  `?api=<url>` overrides it at runtime so a stale constant is recoverable without a code change.
+- `note-page.js` deliberately does **not** import `worker/src/note-core.js`: `/note.json`
+  already returns a computed `summary`, so the arithmetic exists in exactly one place. That is
+  also why `note-core.js` sits in `worker/` and not in `docs/assets/`.
 - The page is **not linked from anywhere** and has **no access check** — `isAllowed()` in
   `worker/src/index.js` returns `true` by design (the owner's explicit choice). It is the single
   place to change if that should ever be gated. `noindex` is set, which is not a control.
