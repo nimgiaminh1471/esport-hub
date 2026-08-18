@@ -26,6 +26,22 @@ const FEED = 'https://feed.lolesports.com/livestats/v1';
  */
 export const FEED_DELAY_SECONDS = 210;
 
+/**
+ * Một số giải (regional/academy — ví dụ north_regional_league) bị Riot tắt hẳn
+ * livestats: mọi request kèm `startingTime` trả về
+ *   404 RESOURCE_NOT_FOUND "Stats are disabled for game EsportsGameId{...}".
+ * Bẫy ở đây: request KHÔNG kèm `startingTime` vẫn trả 200 — nhưng đó là frame
+ * đầu ván toàn số 0 (xem `getWindow`). Nên tuyệt đối không được "chữa" 404 bằng
+ * cách bỏ `startingTime` đi: UI sẽ hiện 0/0/0 như thể là số liệu thật.
+ * Coi ván đó là không có dữ liệu và nhớ lại để chỗ gọi khỏi poll 404 mỗi 10 giây.
+ */
+const statsDisabledGames = new Set();
+
+/** Ván bị Riot tắt livestats (đã phát hiện qua một request trước đó). */
+export function isStatsDisabled(gameId) {
+  return statsDisabledGames.has(String(gameId));
+}
+
 /* ------------------------------------------------------------------ helpers */
 
 /**
@@ -280,6 +296,8 @@ export async function getDetails(gameId, { startingTime, fromStart = false } = {
 }
 
 async function feedGet(kind, gameId, { startingTime, fromStart }) {
+  if (isStatsDisabled(gameId)) return null;
+
   const t = fromStart ? null : (startingTime ?? feedTimestamp());
   const qs = t ? `?startingTime=${encodeURIComponent(t)}` : '';
   let data;
@@ -290,6 +308,11 @@ async function feedGet(kind, gameId, { startingTime, fromStart }) {
     if (err.status === 400 && t && /end time less than/i.test(err.message)) {
       const retryAt = feedTimestamp(new Date(), { lagSeconds: FEED_DELAY_SECONDS + 120 });
       data = await fetchJson(`${FEED}/${kind}/${gameId}?startingTime=${encodeURIComponent(retryAt)}`);
+    } else if (err.status === 404 && /stats are disabled/i.test(err.message)) {
+      // Ván có thật nhưng Riot không mở livestats — "không có dữ liệu", không phải lỗi.
+      // 404 "does not exist" (id sai) thì vẫn ném ra để chỗ gọi báo sai ID.
+      statsDisabledGames.add(String(gameId));
+      return null;
     } else {
       throw err;
     }

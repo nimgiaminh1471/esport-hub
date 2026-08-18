@@ -88,6 +88,13 @@ straight to the finished message — one lost message, never wrong data.
   not the latest state. `getWindow` always supplies a timestamp unless `fromStart: true`.
 - **HTTP 204 means "no livestats yet"** and `fetchJson` maps it to `null`. Callers must
   distinguish `null` from an object; `getGameSnapshot` returns `null` for a game not started.
+- **Some leagues have livestats switched off entirely** (regional/academy — e.g.
+  `north_regional_league`). Every request *with* `startingTime` returns `404
+  RESOURCE_NOT_FOUND "Stats are disabled for game …"`, while the same request *without*
+  `startingTime` returns 200 — but only the all-zero first frame. Do not "fix" the 404 by
+  dropping `startingTime`; that shows 0/0/0 as if it were real data. `feedGet` maps this 404
+  to `null`, remembers the game in `isStatsDisabled(gameId)` so callers stop polling, and
+  still throws on the other 404 (`"does not exist"`, i.e. a wrong id).
 - `API_KEY` in `lol-core.js` is the public key lolesports.com itself ships to browsers. It is
   intentionally committed and must be in client code — it is not a leaked secret.
 - Riot returns image URLs over `http://`; `secureUrl()` rewrites the scheme so GitHub Pages

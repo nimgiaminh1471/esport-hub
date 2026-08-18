@@ -4,7 +4,7 @@
  * Toàn bộ logic nằm ở `docs/assets/lol-core.js` để trang GitHub Pages và bot
  * dùng chung một implementation. File này chỉ re-export + thêm CLI smoke test.
  */
-import provider from '../../docs/assets/lol-core.js';
+import provider, { isStatsDisabled } from '../../docs/assets/lol-core.js';
 
 export * from '../../docs/assets/lol-core.js';
 export default provider;
@@ -44,7 +44,7 @@ if (isMain) {
         if (playable) {
           const snap = await provider.getGameSnapshot(playable.id);
           if (snap) printSnapshot(snap);
-          else console.log('  (ván chưa có dữ liệu livestats)');
+          else console.log(`  (${isStatsDisabled(playable.id) ? 'Riot tắt livestats cho ván này' : 'ván chưa có dữ liệu livestats'})`);
 
           const timeline = await provider.getTimeline(playable.id, { maxSamples: 8 });
           console.log(
@@ -59,7 +59,13 @@ if (isMain) {
     } else if (cmd === '--stats') {
       if (!arg) throw new Error('cần gameId: node src/providers/lol.js --stats <gameId>');
       const snap = await provider.getGameSnapshot(arg);
-      if (!snap) console.log('Ván chưa bắt đầu hoặc không có dữ liệu (HTTP 204).');
+      if (!snap) {
+        console.log(
+          isStatsDisabled(arg)
+            ? 'Riot tắt livestats cho ván này (404 "Stats are disabled").'
+            : 'Ván chưa bắt đầu hoặc không có dữ liệu (HTTP 204).',
+        );
+      }
       else printSnapshot(snap);
     } else if (cmd === '--match') {
       console.log(JSON.stringify(await provider.getMatch(arg), null, 2));

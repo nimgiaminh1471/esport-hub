@@ -10,6 +10,10 @@ import {
 const GAME_POLL_MS = 10_000;
 const MATCH_POLL_MS = 30_000;
 
+/** Riot tắt livestats cả giải, poll lại cũng không có gì — xem `isStatsDisabled`. */
+const NO_LIVESTATS_MSG =
+  'Riot không mở livestats cho ván này (thường gặp ở các giải khu vực), nên không có chỉ số trực tiếp. Lịch, tỉ số và kết quả vẫn cập nhật bình thường.';
+
 const dom = {
   status: document.getElementById('status'),
   head: document.getElementById('head'),
@@ -47,9 +51,10 @@ async function boot() {
     return;
   }
 
-  // Chỉ có gameId thì lấy ngược matchId ra từ feed.
+  // Chỉ có gameId thì lấy ngược matchId ra từ feed. Hỏi frame đầu ván vì ván bị
+  // tắt livestats vẫn trả về frame đó — vẫn đủ để biết ván thuộc trận nào.
   if (!state.matchId) {
-    const window = await lol.getWindow(state.gameId);
+    const window = await lol.getWindow(state.gameId, { fromStart: true });
     if (!window) throw new Error('Không tìm thấy dữ liệu cho ID ván này.');
     state.matchId = String(window.esportsMatchId);
   }
@@ -106,9 +111,18 @@ async function refreshGame() {
 
   if (document.hidden) return;
 
+  if (lol.isStatsDisabled(state.gameId)) {
+    renderNoGame(NO_LIVESTATS_MSG);
+    return;
+  }
+
   const snapshot = await lol.getGameSnapshot(state.gameId);
   if (!snapshot) {
-    renderNoGame('Ván này chưa bắt đầu. Số liệu sẽ xuất hiện sau khi vào game.');
+    renderNoGame(
+      lol.isStatsDisabled(state.gameId)
+        ? NO_LIVESTATS_MSG
+        : 'Ván này chưa bắt đầu. Số liệu sẽ xuất hiện sau khi vào game.',
+    );
     return;
   }
 

@@ -4,7 +4,7 @@ compatibility_date = "2026-08-01"
 
 # Sửa thành URL GitHub Pages thật của bạn, không có dấu / ở cuối.
 [vars]
-PAGES_BASE_URL = "https://<user>.github.io/esports-hub"
+PAGES_BASE_URL = "https://nimgiaminh1471.github.io/esport-hub"
 
 # SLACK_SIGNING_SECRET là secret, KHÔNG đặt ở đây. Nạp bằng:
 #   npx wrangler secret put SLACK_SIGNING_SECRET
