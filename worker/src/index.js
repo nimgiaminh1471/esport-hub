@@ -281,10 +281,15 @@ const json = (payload, { status = 200, headers = {} } = {}) =>
 /**
  * Header cho trang xem sổ.
  *
+ * CORS mở là BẮT BUỘC: trang trên GitHub Pages gọi `/note.json` từ origin khác.
+ * Endpoint này vốn đã không đặt token nên siết CORS cũng chẳng chặn được ai —
+ * chỉ làm trang của mình gãy.
+ *
  * `noindex` để máy tìm kiếm không lập chỉ mục — không phải bảo mật, chỉ là không
- * tự quảng cáo. Không cần CORS: trang do chính Worker trả nên cùng origin.
+ * tự quảng cáo.
  */
 const NOTE_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
   'X-Robots-Tag': 'noindex, nofollow',
   'Cache-Control': 'no-store',
 };
