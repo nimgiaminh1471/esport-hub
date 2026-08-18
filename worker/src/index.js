@@ -16,12 +16,38 @@
 import { getProvider, resolveGame, DEFAULT_GAME } from '../../docs/assets/games.js';
 import { makeLeagueFilter, filterByLeague, hasLeagueFilter } from '../../docs/assets/leagues.js';
 import { scheduleMessage, matchMessage } from '../../src/lib/blocks.js';
+import { handleNote, noteSnapshot } from './note.js';
 
 /** Slack huỷ kết nối sau 3s; chốt 2,5s rồi chuyển sang trả lời trễ qua response_url. */
 const FAST_PATH_MS = 2500;
 
+/**
+ * Cửa duy nhất kiểm tra quyền cho trang xem sổ.
+ *
+ * Hiện luôn cho qua: người dùng chọn trang không đặt token, chỉ dựa vào việc
+ * không có chỗ nào trỏ tới. Gom vào một hàm để nếu sau này muốn siết thì chỉ sửa
+ * đúng chỗ này, không phải lần mò khắp file.
+ */
+function isAllowed() {
+  return true;
+}
+
 export default {
   async fetch(request, env, ctx) {
+    // Trang xem sổ gọi bằng GET từ trình duyệt nên không có chữ ký Slack. Nhánh
+    // này phải nằm TRƯỚC chỗ chặn non-POST, và tuyệt đối không đụng tới đường
+    // POST bên dưới — chữ ký Slack vẫn phải verify y như cũ.
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/note') {
+      if (!isAllowed(request, env)) return new Response('Không có quyền', { status: 403 });
+      if (!env.NOTE) {
+        return json({ error: 'Chưa gắn kho dữ liệu' }, { status: 500, headers: NOTE_HEADERS });
+      }
+
+      const period = url.searchParams.get('period') || undefined;
+      return json(await noteSnapshot(env, period), { headers: NOTE_HEADERS });
+    }
+
     if (request.method !== 'POST') {
       return new Response('Endpoint slash command của Esports Hub. Dùng POST từ Slack.', { status: 405 });
     }
@@ -61,6 +87,19 @@ export default {
 
 export async function handleCommand(body, env = {}) {
   const cmd = String(body.command ?? '').trim();
+
+  // Nhánh sổ ghi chú phải đứng TRƯỚC resolveGame, vì `/note` không phải tên game
+  // nên sẽ rơi vào nhánh báo lỗi "chưa nối với game nào".
+  if (cmd === '/note') {
+    const args = (body.text ?? '').trim().split(/\s+/).filter(Boolean);
+    try {
+      return await handleNote(args, env);
+    } catch (err) {
+      // Lỗi cú pháp của người dùng cũng trả ephemeral, không ném ra ngoài.
+      return { response_type: 'ephemeral', text: `Không ghi được: ${err.message}` };
+    }
+  }
+
   const game = cmd ? resolveGame(cmd) : DEFAULT_GAME;
 
   // Không được im lặng rơi về game mặc định: nếu ai đó đăng ký lệnh `/valorant2`
@@ -226,5 +265,22 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
-const json = (payload) =>
-  new Response(JSON.stringify(payload), { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+const json = (payload, { status = 200, headers = {} } = {}) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+  });
+
+/**
+ * Header cho trang xem sổ.
+ *
+ * CORS mở vì trang Pages nằm khác origin với Worker; endpoint này vốn đã không
+ * đặt token nên siết CORS cũng chẳng chặn được ai — chỉ làm trang mình gãy.
+ * `noindex` để máy tìm kiếm không lập chỉ mục: không phải bảo mật, chỉ là không
+ * tự quảng cáo.
+ */
+const NOTE_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'Cache-Control': 'no-store',
+};

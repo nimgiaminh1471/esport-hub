@@ -14,6 +14,7 @@ npm run serve        # static server for docs/ on http://localhost:8080
 node src/providers/lol.js --stats <gameId>       # one game's live stats
 node src/providers/lol.js --match <matchId>      # full match JSON
 node src/providers/valorant.js --match <matchId> # series + map list (no stats exist)
+# /note is Slack-only; stub KV with a Map to exercise it from Node (see worker/src/note.js)
 GAME=val npm run notify:dry                      # only Valorant
 
 cd worker && npx wrangler dev      # slash command locally (needs worker/.dev.vars)
@@ -112,6 +113,32 @@ conflict rather than a merge. Each game gets its own try/catch and its own state
 `process.exitCode` set only after every game has saved.
 
 League filtering lives in `docs/assets/leagues.js` — see below.
+
+### `/note` — personal ledger, deliberately undiscoverable
+
+A private running tally, unrelated to the esports features. Entered with the `/note` slash
+command, stored in a **Cloudflare KV namespace** (`env.NOTE`), viewed at `docs/note.html`.
+
+- **Data lives in KV, not in this repo** — that is the whole point. `worker/src/note.js` is the
+  only file that touches it; `docs/assets/note-core.js` holds the pure maths so it is testable
+  from Node without KV (stub it with a `Map`; see the header of `note.js`).
+- **One KV key per row**, entry payload in the key's `metadata`. Never collapse a period into a
+  single key: two rows entered seconds apart would race on read-modify-write and one would
+  vanish silently. Keys keep milliseconds so lexicographic order equals chronological order.
+- **Periods run the 26th to the 25th, computed in `Asia/Ho_Chi_Minh`.** `01:00` on the 26th
+  local is `18:00` on the 25th UTC — computing in UTC lands rows in the wrong period, and you
+  would only notice at settlement. `periodOf()` converts via `Intl.DateTimeFormat('en-CA')`.
+- A row's period comes from **when it was entered**, not the match date, so a closed period can
+  never change retroactively.
+- Two independent columns, each carrying its own sign; neither is derivable from the other.
+  `--r 10` with no sign means `+10` and does **not** inherit the row's direction.
+- `docs/note.html` is **not linked from anywhere** and has **no access check** — `isAllowed()`
+  in `worker/src/index.js` returns `true` by design (the owner's explicit choice). It is the
+  single place to change if that should ever be gated. `noindex` is set, which is not a control.
+- The `/note` branch in `handleCommand` must stay **above** `resolveGame` — `/note` is not a
+  game id and would otherwise hit the "unknown command" path.
+- Keep the vocabulary here neutral and the figures unitless. Do not add a currency symbol, and
+  do not name anyone.
 
 ### Dedup is state-based, not time-based
 

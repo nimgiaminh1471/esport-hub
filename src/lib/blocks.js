@@ -109,8 +109,8 @@ export function scheduleMessage(events, { title, empty, url, note }) {
 
   // Mỗi trận hai tầng thay vì nhét hết vào một dòng dài:
   //
-  //   section:  Today 3:00 PM · *DNS vs NS*      <- giờ + đội, cỡ chữ thường
-  //   context:  LCK Challengers · Week 13 · Bo3  <- chữ nhỏ, màu nhạt
+  //   section:  Today 3:00 PM · *DNS vs NS*                <- giờ + đội, chữ thường
+  //   context:  LCK Challengers · Week 13 · Bo3 · `1168…`  <- chữ nhỏ, màu nhạt
   //
   // Nhồi một dòng thì trên điện thoại Slack tự ngắt ở giữa tên giải
   // ("DNS vs NS · LCK / Challengers · Week 13") — chỗ ngắt rơi vào đâu là hên
@@ -131,9 +131,15 @@ export function scheduleMessage(events, { title, empty, url, note }) {
         ? `:red_circle: *${label}*`
         : `${slackDate(event.startTime, '{date_short_pretty} {time}')} · *${label}*`;
 
+    // ID để cuối dòng nhạt: nó chỉ cần khi muốn copy, không phải thứ để lướt.
+    // Là một khối liền không dấu cách nên trên điện thoại thiếu chỗ thì nó tự
+    // xuống dòng nguyên khối, vẫn chạm chọn được, không bị cắt đôi.
     blocks.push(
       { type: 'section', text: { type: 'mrkdwn', text: head } },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: contextLine(event) }] },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `${contextLine(event)} · \`${event.id}\`` }],
+      },
     );
   }
 

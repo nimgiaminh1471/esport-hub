@@ -9,8 +9,8 @@
  *
  * Vì sao là `.js` chứ không phải `.json`: file này phải `import` được từ Worker,
  * mà repo chưa từng import JSON, `wrangler.toml` không khai báo loader nào và
- * cũng không bật `nodejs_compat`. Dùng ESM thuần thì không phải cược vào chuyện
- * đó — đổi lại còn viết được comment thật thay vì nhét vào key `_comment`.
+ * cũng không bật `nodejs_compat`. Dùng ESM thuần thì khỏi phải trông chờ vào
+ * chuyện đó — đổi lại còn viết được comment thật thay vì nhét vào key `_comment`.
  *
  * ESM thuần, không `node:*`, không DOM, không phụ thuộc gì.
  */

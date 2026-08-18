@@ -488,6 +488,12 @@ main {
   background: var(--red);
 }
 
+/* Dòng chốt của một bảng cộng: gạch dày hơn để mắt biết đây là con số cuối. */
+.compare-row--total {
+  border-top-width: 2px;
+  border-top-color: var(--axis);
+}
+
 .dragons {
   display: flex;
   justify-content: space-between;
