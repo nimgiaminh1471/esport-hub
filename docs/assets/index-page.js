@@ -111,11 +111,13 @@ function renderList(mount, events, emptyMessage, skipped = 0) {
       ])
     : null;
 
-  if (!events.length) {
-    mount.append(el('p', { class: 'empty', text: emptyMessage }), note);
-    return;
-  }
-  mount.append(...events.map(matchRow), note);
+  const rows = events.length
+    ? events.map(matchRow)
+    : [el('p', { class: 'empty', text: emptyMessage })];
+
+  // `.filter(Boolean)` là BẮT BUỘC: `Node.append()` không bỏ qua null như `el()`
+  // vẫn làm — nó `String(null)` thành chữ "null" rồi chèn thẳng vào trang.
+  mount.append(...[...rows, note].filter(Boolean));
 }
 
 function linkAll() {
