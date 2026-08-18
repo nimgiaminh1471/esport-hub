@@ -3,10 +3,10 @@
   "game": "val",
   "matches": {
     "116849606242238823": {
-      "state": "unstarted",
+      "state": "inProgress",
       "slackTs": "1787063453.543739",
       "announcedAt": "2026-08-18T14:30:53.609Z",
-      "updatedAt": "2026-08-18T14:30:53.609Z"
+      "updatedAt": "2026-08-18T15:04:44.118Z"
     }
   }
 }
