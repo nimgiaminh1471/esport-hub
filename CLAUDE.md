@@ -117,7 +117,8 @@ League filtering lives in `docs/assets/leagues.js` — see below.
 ### `/note` — personal ledger, deliberately undiscoverable
 
 A private running tally, unrelated to the esports features. Entered with the `/note` slash
-command, stored in a **Cloudflare KV namespace** (`env.NOTE`), viewed at `docs/note.html`.
+command, stored in a **Cloudflare KV namespace** (`env.NOTE`), and viewed at
+`<worker-url>/note` — the Worker itself serves the HTML.
 
 - **Data lives in KV, not in this repo** — that is the whole point. `worker/src/note.js` is the
   only file that touches it; `docs/assets/note-core.js` holds the pure maths so it is testable
@@ -132,9 +133,18 @@ command, stored in a **Cloudflare KV namespace** (`env.NOTE`), viewed at `docs/n
   never change retroactively.
 - Two independent columns, each carrying its own sign; neither is derivable from the other.
   `--r 10` with no sign means `+10` and does **not** inherit the row's direction.
-- `docs/note.html` is **not linked from anywhere** and has **no access check** — `isAllowed()`
-  in `worker/src/index.js` returns `true` by design (the owner's explicit choice). It is the
-  single place to change if that should ever be gated. `noindex` is set, which is not a control.
+- **Nothing about this lives in `docs/`.** The view page is rendered by
+  `worker/src/note-view.js` and served at `GET /note` (raw JSON at `/note.json`). Putting it in
+  `docs/` would publish it to GitHub Pages at a guessable path, and would force hardcoding the
+  Worker URL — the `workers.dev` subdomain belongs to the Cloudflare account and cannot be
+  derived from anything in the repo. Serving from the Worker also removes the CORS need.
+- The page is **not linked from anywhere** and has **no access check** — `isAllowed()` in
+  `worker/src/index.js` returns `true` by design (the owner's explicit choice). It is the single
+  place to change if that should ever be gated. `noindex` is set, which is not a control.
+- The page is a plain template string with **no client-side script**; user-supplied labels and
+  notes go through `esc()` before interpolation.
+- **Anyone in the Slack workspace can run `/note`** and would see this same ledger —
+  `body.user_id` is available but unused. Known gap, not yet closed.
 - The `/note` branch in `handleCommand` must stay **above** `resolveGame` — `/note` is not a
   game id and would otherwise hit the "unknown command" path.
 - Keep the vocabulary here neutral and the figures unitless. Do not add a currency symbol, and

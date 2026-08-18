@@ -24,7 +24,7 @@ import {
   shiftPeriod,
   signed,
   summarise,
-} from '../../docs/assets/note-core.js';
+} from './note-core.js';
 
 /** Metadata của KV tối đa 1024 byte; chừa biên cho các trường khác. */
 const MAX_NOTE_LEN = 300;

@@ -17,6 +17,7 @@ import { getProvider, resolveGame, DEFAULT_GAME } from '../../docs/assets/games.
 import { makeLeagueFilter, filterByLeague, hasLeagueFilter } from '../../docs/assets/leagues.js';
 import { scheduleMessage, matchMessage } from '../../src/lib/blocks.js';
 import { handleNote, noteSnapshot } from './note.js';
+import { renderNotePage } from './note-view.js';
 
 /** Slack huỷ kết nối sau 3s; chốt 2,5s rồi chuyển sang trả lời trễ qua response_url. */
 const FAST_PATH_MS = 2500;
@@ -38,14 +39,20 @@ export default {
     // này phải nằm TRƯỚC chỗ chặn non-POST, và tuyệt đối không đụng tới đường
     // POST bên dưới — chữ ký Slack vẫn phải verify y như cũ.
     const url = new URL(request.url);
-    if (request.method === 'GET' && url.pathname === '/note') {
+    if (request.method === 'GET' && (url.pathname === '/note' || url.pathname === '/note.json')) {
       if (!isAllowed(request, env)) return new Response('Không có quyền', { status: 403 });
       if (!env.NOTE) {
         return json({ error: 'Chưa gắn kho dữ liệu' }, { status: 500, headers: NOTE_HEADERS });
       }
 
-      const period = url.searchParams.get('period') || undefined;
-      return json(await noteSnapshot(env, period), { headers: NOTE_HEADERS });
+      const snapshot = await noteSnapshot(env, url.searchParams.get('period') || undefined);
+
+      // `/note` trả trang xem; `/note.json` trả dữ liệu thô nếu cần tự xử lý.
+      if (url.pathname === '/note.json') return json(snapshot, { headers: NOTE_HEADERS });
+
+      return new Response(renderNotePage(snapshot), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', ...NOTE_HEADERS },
+      });
     }
 
     if (request.method !== 'POST') {
@@ -274,13 +281,10 @@ const json = (payload, { status = 200, headers = {} } = {}) =>
 /**
  * Header cho trang xem sổ.
  *
- * CORS mở vì trang Pages nằm khác origin với Worker; endpoint này vốn đã không
- * đặt token nên siết CORS cũng chẳng chặn được ai — chỉ làm trang mình gãy.
- * `noindex` để máy tìm kiếm không lập chỉ mục: không phải bảo mật, chỉ là không
- * tự quảng cáo.
+ * `noindex` để máy tìm kiếm không lập chỉ mục — không phải bảo mật, chỉ là không
+ * tự quảng cáo. Không cần CORS: trang do chính Worker trả nên cùng origin.
  */
 const NOTE_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
   'X-Robots-Tag': 'noindex, nofollow',
   'Cache-Control': 'no-store',
 };
