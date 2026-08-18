@@ -1,5 +1,12 @@
 {
   "version": 1,
   "game": "lol",
-  "matches": {}
+  "matches": {
+    "116889604984222845": {
+      "state": "unstarted",
+      "slackTs": "1787039292.894219",
+      "announcedAt": "2026-08-18T07:48:12.931Z",
+      "updatedAt": "2026-08-18T07:48:12.931Z"
+    }
+  }
 }
