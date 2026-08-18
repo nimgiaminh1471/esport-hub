@@ -1215,3 +1215,231 @@ th.num {
     gap: 6px 12px;
   }
 }
+
+/* ------------------------------------------------- khay nhận định trước trận
+
+   Kiểu khay trượt cạnh phải, giống widget hỗ trợ: một nút nổi luôn thấy, bấm thì
+   khay đẩy vào. Nút và khay đều `position: fixed` và nằm ngoài các mount mà
+   render() xoá mỗi 10 giây, nên nhịp poll không làm khay tự đóng. */
+
+.peek-toggle {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  border-radius: 8px 0 0 8px;
+  border-right: none;
+  background: var(--surface-2);
+  writing-mode: vertical-rl;
+  padding: 14px 7px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.35);
+}
+
+.peek {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  max-width: 100vw;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+  /* Đóng thì đẩy hẳn ra ngoài chứ không `display:none`, để có chuyển động. */
+  transform: translateX(100%);
+  transition: transform 0.18s ease;
+}
+
+body.peek-open .peek {
+  transform: translateX(0);
+}
+
+body.peek-open .peek-toggle {
+  /* Nút lùi ra sau khay, khỏi che nội dung. */
+  transform: translateY(-50%) translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .peek,
+  .peek-toggle {
+    transition: none;
+  }
+}
+
+.peek > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.peek h2 {
+  font-size: 14px;
+}
+
+.peek-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.peek-x:hover {
+  color: var(--ink);
+}
+
+.peek-body {
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.peek-sec h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.peek-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--grid);
+  font-size: 13px;
+}
+
+.peek-row:first-of-type {
+  border-top: none;
+}
+
+.peek-row .when {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.peek-row .what {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.peek-row .bo {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Đội thắng đậm và sáng; đội thua để màu chữ phụ, không tô đỏ — thua không phải lỗi. */
+.peek-row b {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.peek-row b.lead,
+.peek-score b.lead {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.peek-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 62px;
+}
+
+.peek-team img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.peek-team b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.peek-h2h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 12px;
+}
+
+.peek-score {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.peek-score span {
+  color: var(--muted);
+  margin: 0 6px;
+}
+
+.peek-score b {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Chuỗi phong độ: ô vuông nhỏ, chữ T/B để không phải dựa vào màu mới đọc được. */
+.peek-form {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.peek-form i {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  font-style: normal;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.peek-form i.w {
+  background: rgba(12, 163, 12, 0.22);
+  color: #4ede4e;
+}
+
+.peek-form i.l {
+  background: rgba(208, 59, 59, 0.2);
+  color: #ff8f8f;
+}
+
+@media (max-width: 560px) {
+  .peek {
+    width: 100vw;
+  }
+
+  /* Màn hẹp thì khay chiếm hết, nút phải ẩn đi kẻo che nội dung. */
+  body.peek-open .peek-toggle {
+    display: none;
+  }
+}

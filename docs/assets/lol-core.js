@@ -64,6 +64,8 @@ export const {
   getUpcoming,
   getLive,
   getMatch,
+  getStandings,
+  getLeagueHistory,
 } = gateway;
 
 /* ---------------------------------------------------------- feed livestats */

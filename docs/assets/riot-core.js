@@ -280,6 +280,70 @@ export function createRiotGateway({
     return events.find((e) => e.id === id) ?? null;
   }
 
+  /**
+   * Bảng xếp hạng của một giai đoạn giải.
+   *
+   * Vòng loại trực tiếp thì `rankings` RỖNG — đúng bản chất, knockout không có
+   * bảng. Chỗ gọi phải phân biệt "rỗng vì knockout" với "lỗi", đừng hiện bảng
+   * trắng như thể mất dữ liệu.
+   *
+   * Hai game trả cấu trúc lồng khác nhau nên đi dò phòng thủ thay vì bám cứng
+   * đường dẫn.
+   */
+  async function getStandings({ tournamentId } = {}) {
+    if (!tournamentId) return [];
+    const data = await gw('getStandings', { tournamentId });
+
+    const out = [];
+    for (const standing of data?.data?.standings ?? []) {
+      for (const stage of standing.stages ?? []) {
+        for (const section of stage.sections ?? []) {
+          out.push({
+            stage: stage.name ?? null,
+            section: section.name ?? null,
+            rankings: (section.rankings ?? []).map((r) => ({
+              ordinal: r.ordinal,
+              teams: (r.teams ?? []).map((t) => ({
+                id: t.id ?? null,
+                name: t.name ?? 'TBD',
+                code: t.code ?? '???',
+                image: secureUrl(t.image),
+                record: t.record ?? null,
+              })),
+            })),
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Các trận đã qua của một giải, lấy bằng cách lật `pages.older` về quá khứ.
+   *
+   * Cố ý KHÔNG dùng `getCompletedEvents`: nó tồn tại cho LoL nhưng Valorant trả
+   * 400, lại phải xin `getTournamentsForLeague` (Valorant cũng 400) để biết id
+   * từng split. Lật trang lịch chạy cho cả hai game, và đo thực tế còn sâu hơn —
+   * 5 trang phủ khoảng hai năm.
+   */
+  async function getLeagueHistory({ leagueId, pages = 5, signal, onPage } = {}) {
+    if (!leagueId) return [];
+
+    const out = [];
+    let pageToken;
+    for (let page = 0; page < pages; page++) {
+      if (signal?.aborted) break;
+      const { events, pages: nav } = await getSchedule({ leagueId, pageToken });
+      out.push(...events);
+      // Các trang phải lấy tuần tự vì trang sau cần token của trang trước, không
+      // song song hoá được — nên báo tiến độ để mấy giây chờ đỡ mù.
+      onPage?.({ page: page + 1, of: pages, events: out.length });
+      if (!nav?.older || !events.length) break;
+      pageToken = nav.older;
+    }
+    return out;
+  }
+
   return {
     id,
     name,
@@ -292,6 +356,68 @@ export function createRiotGateway({
     getUpcoming,
     getLive,
     getMatch,
+    getStandings,
+    getLeagueHistory,
+  };
+}
+
+/**
+ * Ai thắng một trận đã xong.
+ *
+ * Phải so `wins` (gameWins) chứ KHÔNG đọc `outcome`: dữ liệu quá khứ lấy qua
+ * `getSchedule` không có `outcome` (đã kiểm chứng — luôn null), nên tin vào nó là
+ * ra kết quả rỗng mà không báo lỗi gì.
+ */
+export function winnerCode(event) {
+  const [a, b] = event.teams ?? [];
+  if (!a || !b || a.wins === b.wins) return null;
+  return a.wins > b.wins ? a.code : b.code;
+}
+
+/**
+ * Gom lịch sử một giải thành phần nhận định trước trận: đối đầu, tỉ số đối đầu,
+ * và phong độ gần đây của từng đội.
+ *
+ * Khớp đội theo `code` chứ KHÔNG theo `id`: dữ liệu quá khứ không kèm `id` đội
+ * (đã kiểm chứng — `id` luôn undefined), khớp theo id sẽ ra 0 kết quả trong im
+ * lặng. `code` chỉ cần duy nhất trong phạm vi một giải, và ở đây đúng như vậy.
+ */
+export function summariseMatchup(events, codeA, codeB, { formSize = 5 } = {}) {
+  const done = (events ?? [])
+    .filter((e) => e.state === 'completed' && (e.teams ?? []).length === 2)
+    .sort((x, y) => Date.parse(y.startTime) - Date.parse(x.startTime));
+
+  const meetings = done.filter((e) => {
+    const codes = e.teams.map((t) => t.code);
+    return codes.includes(codeA) && codes.includes(codeB);
+  });
+
+  const score = { [codeA]: 0, [codeB]: 0 };
+  for (const m of meetings) {
+    const w = winnerCode(m);
+    if (w in score) score[w] += 1;
+  }
+
+  const formOf = (code) =>
+    done
+      .filter((e) => e.teams.some((t) => t.code === code))
+      .slice(0, formSize)
+      .map((e) => {
+        const self = e.teams.find((t) => t.code === code);
+        const other = e.teams.find((t) => t.code !== code);
+        return {
+          win: winnerCode(e) === code,
+          at: e.startTime,
+          opponent: other?.code ?? '???',
+          score: `${self?.wins ?? 0}–${other?.wins ?? 0}`,
+        };
+      });
+
+  return {
+    meetings,
+    score,
+    form: { [codeA]: formOf(codeA), [codeB]: formOf(codeB) },
+    scanned: done.length,
   };
 }
 

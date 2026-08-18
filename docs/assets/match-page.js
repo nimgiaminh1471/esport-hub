@@ -2,6 +2,7 @@
 import { getProvider, gameFromSearch } from './games.js';
 import { loadAssets } from './ddragon.js';
 import { renderGoldDiffChart } from './chart.js';
+import { mountPreviewPanel } from './preview-panel.js';
 import {
   el, clear, img, setStatus, stateBadge, dateTimeVN, relativeVN,
   compactGold, percent, ROLE_VN, DRAGON_VN, LANE_ORDER,
@@ -52,6 +53,7 @@ const state = {
   // 10 giây — giữ trong DOM thì cứ đến nhịp poll là bị bật về mặc định.
   chartView: 'chart',
   playersView: 'lane',
+  peek: null,
 };
 
 if (dom.brand) dom.brand.textContent = `· ${sport === 'lol' ? 'LoL' : provider.name}`;
@@ -117,6 +119,10 @@ async function refreshMatch() {
 
   renderHead(match);
   renderGameTabs(match);
+
+  // Gắn MỘT lần. refreshMatch chạy lại mỗi 30 giây, gắn lại mỗi lượt sẽ đẻ ra
+  // hàng chồng khay và làm mất trạng thái đang mở.
+  if (!state.peek) state.peek = mountPreviewPanel(provider, match);
 }
 
 /** Ưu tiên ván đang đá; chưa có thì ván cuối đã xong; chưa có nữa thì ván 1. */

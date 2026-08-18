@@ -43,6 +43,8 @@ export const {
   getUpcoming,
   getLive,
   getMatch,
+  getStandings,
+  getLeagueHistory,
 } = gateway;
 
 /* ------------------------------------------------------------------- stubs */
