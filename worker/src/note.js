@@ -115,9 +115,9 @@ function reportText(period, entries) {
 const HELP = [
   '*Sổ ghi chú* — chỉ mình bạn thấy các trả lời này.',
   '```',
-  '/note add <mã> +              chung +1',
+  '/note add <mã> +              chung +2',
   '/note add <mã> -              chung −1',
-  '/note add <mã> + --r +10      chung +1, riêng +10',
+  '/note add <mã> + --r +10      chung +2, riêng +10',
   '/note add <mã> --r -5         chỉ riêng, không có chung',
   '/note add <mã> ván 2 +        ghi theo ván',
   '/note report [YYYY-MM]        cộng sổ một kỳ',
@@ -157,7 +157,7 @@ export async function handleNote(args, env) {
         label: ref.label,
         game: ref.game,
         gameNumber: parsed.gameNumber,
-        dir: parsed.dir,
+        chung: parsed.chung,
         rieng: parsed.rieng,
         note: parsed.note ? parsed.note.slice(0, MAX_NOTE_LEN) : null,
       };

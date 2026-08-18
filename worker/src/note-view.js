@@ -69,7 +69,7 @@ function detailRows(entries) {
       return `<tr>
         <td>${when}</td>
         <td>${what}</td>
-        <td class="n">${e.dir ? esc(signed(e.dir)) : ''}</td>
+        <td class="n">${(e.chung ?? e.dir) ? esc(signed(e.chung ?? e.dir)) : ''}</td>
         <td class="n">${Number.isFinite(e.rieng) && e.rieng ? esc(signed(e.rieng)) : ''}</td>
       </tr>`;
     })

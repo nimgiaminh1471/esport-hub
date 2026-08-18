@@ -120,7 +120,7 @@ function row(entry) {
   return el('tr', {}, [
     el('td', { text: when }),
     el('td', { text: what }),
-    el('td', { class: 'num', text: entry.dir ? signed(entry.dir) : '' }),
+    el('td', { class: 'num', text: (entry.chung ?? entry.dir) ? signed(entry.chung ?? entry.dir) : '' }),
     el('td', {
       class: 'num',
       text: Number.isFinite(entry.rieng) && entry.rieng ? signed(entry.rieng) : '',

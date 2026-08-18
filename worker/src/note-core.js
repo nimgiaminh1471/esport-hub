@@ -12,6 +12,16 @@
  * Số để trần, không đơn vị.
  */
 
+/**
+ * Mức của mục chung: dấu `+` ăn 2, dấu `-` trừ 1. Không đối xứng, cố ý.
+ *
+ * Con SỐ được lưu vào từng dòng, KHÔNG lưu chiều rồi nhân tỉ lệ lúc đọc. Nếu lưu
+ * chiều thì đổi bảng này một lần là toàn bộ dòng cũ bị tính lại theo mức mới —
+ * sổ đã chốt xong tự nhiên đổi số, không thể đối chiếu với lần thanh toán trước.
+ * Lưu số thì đổi mức chỉ ảnh hưởng các dòng ghi từ đó về sau, đúng như sổ sách.
+ */
+export const RATE = { plus: 2, minus: -1 };
+
 /** Mọi mốc thời gian quy về giờ Việt Nam trước khi xét ngày. */
 export const TZ = 'Asia/Ho_Chi_Minh';
 
@@ -101,9 +111,12 @@ export function summarise(entries) {
   };
 
   for (const e of entries) {
-    if (e.dir) {
-      s.chung += e.dir;
-      if (e.dir > 0) s.chungPlus++;
+    // `dir` là tên cũ của cùng trường này, hồi còn lưu chiều (±1) thay vì số.
+    // Đọc cả hai để dòng ghi trước khi đổi mức vẫn giữ đúng con số đã chốt.
+    const chung = e.chung ?? e.dir;
+    if (chung) {
+      s.chung += chung;
+      if (chung > 0) s.chungPlus++;
       else s.chungMinus++;
     }
     if (Number.isFinite(e.rieng) && e.rieng !== 0) {
@@ -127,7 +140,7 @@ export function formatEntry(entry) {
 
   // Không có mục nào thì bỏ hẳn, đừng chèn dấu giữ chỗ — dòng đó sẽ ra "· · ·".
   const cols = [
-    entry.dir ? `chung ${signed(entry.dir)}` : null,
+    (entry.chung ?? entry.dir) ? `chung ${signed(entry.chung ?? entry.dir)}` : null,
     Number.isFinite(entry.rieng) && entry.rieng !== 0 ? `riêng ${signed(entry.rieng)}` : null,
     entry.note || null,
   ].filter(Boolean);
@@ -141,19 +154,19 @@ export function formatEntry(entry) {
  * Tách các phần của lệnh thêm dòng. Thuần, không gọi mạng — chỗ gọi tự tra cứu
  * `ref` sau.
  *
- * Trả `{ ref, dir, rieng, gameNumber, note }`:
+ * Trả `{ ref, chung, rieng, gameNumber, note }`:
  *   ref        chuỗi đầu tiên: mã trận, hoặc nhãn tự gõ
- *   dir        +1 / -1 / null (null = dòng này không có mục chung)
+ *   chung      RATE.plus / RATE.minus / null (null = dòng này không có mục chung)
  *   rieng      số mang dấu, hoặc null
  *   gameNumber số ván, hoặc null
  *
- * `--r 10` không dấu hiểu là `+10`. KHÔNG cho nó thừa hưởng dấu của `dir`: suy
+ * `--r 10` không dấu hiểu là `+10`. KHÔNG cho nó thừa hưởng dấu của `chung`: suy
  * diễn ngầm trên sổ sách là thứ vài tháng sau không ai nhớ nổi quy tắc nào đang
  * áp dụng, và sai thì sai âm thầm.
  */
 export function parseAdd(tokens) {
   const rest = [...tokens];
-  let dir = null;
+  let chung = null;
   let rieng = null;
   let gameNumber = null;
 
@@ -181,17 +194,17 @@ export function parseAdd(tokens) {
   // dấu + / - đứng riêng
   const di = rest.findIndex((t) => t === '+' || t === '-');
   if (di !== -1) {
-    dir = rest[di] === '+' ? 1 : -1;
+    chung = rest[di] === '+' ? RATE.plus : RATE.minus;
     rest.splice(di, 1);
   }
 
   const ref = rest.shift() ?? '';
   const note = rest.join(' ').trim() || null;
 
-  if (dir === null && rieng === null) {
+  if (chung === null && rieng === null) {
     throw new Error('Cần ít nhất `+`, `-` hoặc `--r <số>`, nếu không thì dòng này chẳng ghi gì.');
   }
   if (!ref) throw new Error('Cần mã trận hoặc một nhãn để biết dòng này thuộc về đâu.');
 
-  return { ref, dir, rieng, gameNumber, note };
+  return { ref, chung, rieng, gameNumber, note };
 }
