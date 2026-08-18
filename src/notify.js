@@ -51,7 +51,7 @@ async function main() {
 
 async function runGame(game) {
   const provider = getProvider(game);
-  const keepLeague = await makeLeagueFilter(game);
+  const keepLeague = makeLeagueFilter(game);
   const state = await loadState(game);
   const now = Date.now();
 

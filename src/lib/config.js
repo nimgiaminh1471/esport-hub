@@ -1,5 +1,4 @@
-/** Đọc cấu hình từ biến môi trường + config/leagues.json. */
-import { readFile } from 'node:fs/promises';
+/** Đọc cấu hình từ biến môi trường. Bộ lọc giải xem `docs/assets/leagues.js`. */
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -33,33 +32,15 @@ export function matchUrl(matchId, game = 'lol') {
   return `${config.pagesBaseUrl}/match.html?match=${encodeURIComponent(matchId)}${sport}`;
 }
 
-let leaguesPromise = null;
-
-export function loadLeagueFilter() {
-  leaguesPromise ??= readFile(resolve(ROOT, 'config/leagues.json'), 'utf8')
-    .then(JSON.parse)
-    .catch(() => ({ mode: 'all', exclude: [] }));
-  return leaguesPromise;
-}
-
 /**
- * `mode: "all"` = nhận tất cả trừ `exclude`; `mode: "include"` = chỉ nhận `include`.
+ * Bộ lọc giải nằm ở `docs/assets/leagues.js`, không phải ở đây.
  *
- * Cấu hình riêng từng game nằm ở `games.<id>`; không khai báo thì rơi về cấu hình
- * gốc ở cấp cao nhất — nên khi file chưa có key `games`, hành vi của LoL y hệt
- * như trước, chứng minh được chứ không phải "chắc là không sao".
+ * Lý do: Worker và trình duyệt cũng cần đúng bộ lọc đó, mà file này dùng
+ * `node:fs` nên Worker không import được, còn `config/` thì trình duyệt không
+ * tải được (GitHub Pages chỉ phục vụ `docs/`). Re-export lại để `src/` giữ
+ * nguyên đường import quen thuộc.
  */
-export async function makeLeagueFilter(game = 'lol') {
-  const root = await loadLeagueFilter();
-  const cfg = root.games?.[game] ?? root;
-  const exclude = new Set(cfg.exclude ?? []);
-  const include = new Set(cfg.include ?? []);
-  return (event) => {
-    const slug = event.league?.slug;
-    if (cfg.mode === 'include') return include.has(slug);
-    return !exclude.has(slug);
-  };
-}
+export { makeLeagueFilter, filterByLeague, unknownSlugs } from '../../docs/assets/leagues.js';
 
 export function assertSlackConfigured() {
   if (config.dryRun) return;

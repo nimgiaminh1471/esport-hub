@@ -9,6 +9,7 @@
  * đúng những gì API thật sự trả về.
  */
 import provider from '../../docs/assets/val-core.js';
+import { unknownSlugs } from '../../docs/assets/leagues.js';
 
 export * from '../../docs/assets/val-core.js';
 export default provider;
@@ -45,6 +46,10 @@ if (isMain) {
       const leagues = await provider.getLeagues();
       console.log(`=== GIẢI (${leagues.length}) ===`);
       console.log(' ', leagues.map((l) => l.slug).join(' '));
+
+      // Slug sai trong bộ lọc = giải đó mất hẳn khỏi thông báo mà không báo gì.
+      const bad = unknownSlugs('val', leagues);
+      console.log(bad.length ? `⚠ Slug không tồn tại: ${bad.join(', ')}` : '✓ Mọi slug trong bộ lọc đều có thật');
 
       const live = await provider.getLive();
       console.log(`\n=== ĐANG DIỄN RA (${live.length}) ===`);

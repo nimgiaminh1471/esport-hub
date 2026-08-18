@@ -176,23 +176,36 @@ Sau đó trong Slack App:
 
 ## Lọc giải
 
-`config/leagues.json` — cấu hình gốc áp cho LoL, game khác nằm trong `games.<id>`:
+`docs/assets/leagues.js` — một chỗ duy nhất, dùng chung cho bot Slack, slash command và web:
 
-```json
-{ "mode": "all", "exclude": [],
-  "games": { "val": { "mode": "all", "exclude": [] } } }
+```js
+export const LEAGUE_POLICY = {
+  lol: { mode: 'include', include: ['worlds', 'msi', 'lck', 'lpl', ...] },
+  val: { mode: 'all', exclude: [] },
+};
 ```
 
-- `mode: "all"` — báo tất cả giải, trừ những slug trong `exclude`
 - `mode: "include"` — chỉ báo những slug trong `include`
-- game không có mục riêng trong `games` thì dùng cấu hình gốc
+- `mode: "all"` — báo tất cả, trừ những slug trong `exclude`
 
-Slug lấy từ `getLeagues` của từng game — LoL: `lck`, `lpl`, `lec`, `worlds`, `msi`…;
-Valorant: `champions`, `vct_masters`, `vct_emea`, `challengers_sea_vn`… (54 slug).
+LoL đang lọc còn **13 giải**: worlds, msi, first_stand, ewc_lol, lck, lpl, lec, lcp, lta_n,
+lta_s, vcs, lck_challengers_league, kespa_cup. Bỏ bớt hay thêm vào thì sửa thẳng mảng đó.
+Valorant đang bật hết (đo thực tế chỉ ~5 trận/24h).
 
-Cả hai đang bật **tất cả các giải**. Nghe thì nhiều nhưng đo thực tế Valorant chỉ khoảng
-5 trận/24h, vì phần lớn giải khu vực không chạy cùng lúc. Đếm trước khi lo:
-`GAME=val npm run notify:dry` rồi xem dòng tổng kết. Muốn bớt thì thêm slug vào `exclude`.
+> Vì sao nằm trong `docs/assets/` chứ không phải `config/`: trình duyệt chỉ tải được file
+> trong `docs/` (GitHub Pages chỉ phục vụ thư mục đó), mà trang web cũng cần đúng bộ lọc này.
+> Là `.js` chứ không phải `.json` để Worker `import` được mà không phải khai báo loader.
+
+Slug lấy từ `getLeagues` của từng game. **Gõ sai slug thì giải đó biến mất không báo lỗi** —
+`npm run smoke` đối chiếu với danh sách thật và cảnh báo, nên chạy nó sau mỗi lần sửa.
+
+**Xem tạm tất cả giải** mà không phải sửa cấu hình:
+
+```
+/lol schedule 24 all        Slack
+/lol live all
+https://…/?leagues=all      web (hoặc bấm nút "Tất cả")
+```
 
 ---
 

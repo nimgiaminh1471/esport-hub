@@ -40,8 +40,8 @@
  *   1. Viết `docs/assets/<game>-core.js` — thường chỉ là một lời gọi
  *      `createRiotGateway({...})` nếu game đó cũng chạy trên gateway của Riot.
  *   2. Thêm một dòng vào `providers` bên dưới.
- *   3. (tuỳ chọn) thêm mục vào `config/leagues.json` → `games.<id>`; không có thì
- *      mặc định lấy tất cả giải.
+ *   3. (tuỳ chọn) thêm mục vào `LEAGUE_POLICY` trong `docs/assets/leagues.js`;
+ *      không khai báo thì mặc định lấy tất cả giải.
  *   4. (tuỳ chọn) đăng ký slash command `/<game>` trỏ vào ĐÚNG Worker URL cũ.
  *
  * `src/notify.js`, `src/lib/*`, `worker/`, workflow và các trang web không phải

@@ -111,8 +111,7 @@ conflict rather than a merge. Each game gets its own try/catch and its own state
 (`state/announced.json` for LoL, `state/announced-<game>.json` otherwise), with
 `process.exitCode` set only after every game has saved.
 
-League filtering is per-game under `games.<id>` in `config/leagues.json`; a game with no entry
-falls back to the top-level config, which is why LoL's behaviour is provably unchanged.
+League filtering lives in `docs/assets/leagues.js` — see below.
 
 ### Dedup is state-based, not time-based
 
@@ -157,11 +156,25 @@ straight to the finished message — one lost message, never wrong data.
 
 - Env vars are read in `src/lib/config.js` only. `.env.example` documents them; `DRY_RUN=1`
   bypasses the Slack-config assertion.
-- League filtering lives in `config/leagues.json`, per game under `games.<id>` (`mode: "all"`
-  + `exclude`, or `mode: "include"`). Slugs come from that game's `getLeagues`. Default is all
-  leagues. Valorant has 54 league slugs but only ~5 matches/24h in practice, because most
-  regional circuits are not in season simultaneously — measure with `GAME=val npm run
-  notify:dry` before assuming a flood.
+- **League filtering is in `docs/assets/leagues.js`, not `config/`.** It has to be somewhere
+  all three surfaces can import: the Worker cannot import `src/lib/config.js` (it uses
+  `node:fs`), and the browser cannot fetch anything outside `docs/` (GitHub Pages serves only
+  that directory). It is `.js` rather than `.json` because the repo has no JSON-import
+  precedent and `wrangler.toml` declares no loader — plain ESM sidesteps the question.
+  `src/lib/config.js` re-exports it so `src/` keeps its familiar import path.
+- LoL filters down to 13 leagues; Valorant is `mode: "all"` (measured at ~5 matches/24h).
+  A misspelled slug makes that league vanish with no error, so `npm run smoke` cross-checks
+  every configured slug against the live `getLeagues()` and warns.
+- **Filtering is client-side on purpose.** The API *does* accept `leagueId=id1,id2,id3`
+  (comma-separated, survives `URLSearchParams` percent-encoding, works for Valorant too) — but
+  you cannot count what you never fetched, and the "đã bỏ qua N trận" line is what tells the
+  reader the filter is on rather than the bot being broken.
+- **Callers must pass `limit: Infinity` to `getUpcoming` before filtering.** It applies
+  `slice(0, limit)` *after* collecting across every league, so asking for 20 and filtering
+  afterwards can yield zero even when the window holds LCK matches. Its pagination is driven by
+  time, not count, so a large limit costs no extra requests.
+- Escape hatches: `all` token on the slash command (`/lol schedule 24 all`), `?leagues=all`
+  on the web.
 - The Worker holds the only real secret (`SLACK_SIGNING_SECRET`, via `wrangler secret put` or
   `worker/.dev.vars`). `PAGES_BASE_URL` is a plain var in `wrangler.toml`.
 - Slack gives slash commands 3 seconds; the Worker races the work against `FAST_PATH_MS`

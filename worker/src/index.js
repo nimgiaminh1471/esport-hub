@@ -14,6 +14,7 @@
  * deploy thêm gì.
  */
 import { getProvider, resolveGame, DEFAULT_GAME } from '../../docs/assets/games.js';
+import { makeLeagueFilter, filterByLeague, hasLeagueFilter } from '../../docs/assets/leagues.js';
 import { scheduleMessage, matchMessage } from '../../src/lib/blocks.js';
 
 /** Slack huỷ kết nối sau 3s; chốt 2,5s rồi chuyển sang trả lời trễ qua response_url. */
@@ -80,7 +81,18 @@ export async function handleCommand(body, env = {}) {
   const share = shareIndex !== -1;
   if (share) args.splice(shareIndex, 1);
 
+  // `all` ở bất kỳ đâu = bỏ bộ lọc giải. Tách ra khỏi args TRƯỚC khi đọc tham số
+  // để `schedule 15 all` và `schedule all` đều hiểu đúng.
+  const allIndex = args.findIndex((a) => ['all', '--all', 'tatca', 'tất cả'].includes(a));
+  const showAll = allIndex !== -1;
+  if (showAll) args.splice(allIndex, 1);
+
   const [sub = 'help', ...rest] = args;
+
+  // Chỉ gọi là "giải lớn" khi thật sự đang lọc — gõ `all` (hoặc game không lọc
+  // gì như Valorant) mà vẫn báo "không có trận giải lớn nào" là nói sai.
+  const filtering = hasLeagueFilter(game) && !showAll;
+  const scope = filtering ? ' giải lớn' : '';
   const self = cmd || `/${game}`;
   const url = (matchId) => {
     if (!env.PAGES_BASE_URL) return null;
@@ -96,22 +108,32 @@ export async function handleCommand(body, env = {}) {
     case 'lich':
     case 'lịch': {
       const hours = Number(rest[0]) || 24;
-      const events = await provider.getUpcoming({ withinMinutes: hours * 60, limit: 20 });
+      // `limit: Infinity` để lấy TRỌN cửa sổ rồi mới lọc. Xin sẵn 20 thì
+      // getUpcoming cắt 20 trận sớm nhất của MỌI giải trước, lọc sau có khi còn 0
+      // dù trong cửa sổ vẫn có trận LCK. Phân trang của nó chạy theo thời gian
+      // chứ không theo số lượng nên xin nhiều không tốn thêm request nào.
+      const all = await provider.getUpcoming({ withinMinutes: hours * 60, limit: Infinity });
+      const { events, skipped } = filterByLeague(all, makeLeagueFilter(game, { all: showAll }));
+
       return { response_type: responseType, ...scheduleMessage(events, {
         title: `Lịch thi đấu ${hours} giờ tới`,
-        empty: `Không có trận nào trong ${hours} giờ tới.`,
+        empty: `Không có trận${scope} nào trong ${hours} giờ tới.`,
         url,
+        note: skippedNote(skipped, `${self} schedule ${hours} all`),
       }) };
     }
 
     case 'live':
     case 'dang':
     case 'đang': {
-      const events = await provider.getLive();
+      const all = await provider.getLive();
+      const { events, skipped } = filterByLeague(all, makeLeagueFilter(game, { all: showAll }));
+
       return { response_type: responseType, ...scheduleMessage(events, {
         title: 'Trận đang diễn ra',
-        empty: 'Hiện không có trận nào đang diễn ra.',
+        empty: `Hiện không có trận${scope} nào đang diễn ra.`,
         url,
+        note: skippedNote(skipped, `${self} live all`),
       }) };
     }
 
@@ -148,10 +170,24 @@ export async function handleCommand(body, env = {}) {
           `\`${self} live\` — các trận đang diễn ra`,
           `\`${self} match <id>\` — chi tiết${provider.capabilities.liveStats ? ' và chỉ số' : ''} một trận`,
           '',
+          ...(hasLeagueFilter(game)
+            ? [`Mặc định chỉ hiện các giải lớn. Thêm \`all\` để xem hết: \`${self} schedule 24 all\`.`]
+            : []),
           'Thêm `--share` vào cuối để đăng cho cả kênh thấy thay vì chỉ mình bạn.',
         ].join('\n'),
       };
   }
+}
+
+/**
+ * Dòng "đã bỏ qua N trận" kèm cách xem hết.
+ *
+ * Không bỏ qua trận nào thì không hiện gì — người dùng gõ `all` mà vẫn thấy dòng
+ * "đã bỏ qua 0 trận" thì chỉ tổ rối.
+ */
+function skippedNote(skipped, howToSeeAll) {
+  if (!skipped) return null;
+  return `Đã bỏ qua ${skipped} trận ở các giải khác · gõ \`${howToSeeAll}\` để xem hết`;
 }
 
 /* ------------------------------------------------------------ xác thực Slack */

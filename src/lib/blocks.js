@@ -94,8 +94,18 @@ export function finishedMessage(event, url) {
 /* ------------------------------------------- dùng cho slash command của Worker */
 
 /** Danh sách trận dạng gọn, mỗi trận một dòng. */
-export function scheduleMessage(events, { title, empty, url }) {
-  if (!events.length) return { text: empty, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: empty } }] };
+export function scheduleMessage(events, { title, empty, url, note }) {
+  // Dòng `note` ("đã bỏ qua N trận") hiện ở CẢ hai trường hợp có trận lẫn rỗng.
+  // Rỗng mà chỉ nói trống không "không có trận nào" thì rất dễ tưởng bot hỏng,
+  // vì trước khi bật lọc chính lệnh đó vẫn ra cả chục trận.
+  const noteBlock = note ? [{ type: 'context', elements: [{ type: 'mrkdwn', text: note }] }] : [];
+
+  if (!events.length) {
+    return {
+      text: empty,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: empty } }, ...noteBlock],
+    };
+  }
 
   // Mỗi trận hai tầng thay vì nhét hết vào một dòng dài:
   //
@@ -133,6 +143,8 @@ export function scheduleMessage(events, { title, empty, url }) {
       elements: [{ type: 'mrkdwn', text: `… và ${events.length - shown.length} trận nữa` }],
     });
   }
+
+  blocks.push(...noteBlock);
 
   return { text: title, blocks };
 }

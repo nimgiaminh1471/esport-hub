@@ -5,6 +5,7 @@
  * dùng chung một implementation. File này chỉ re-export + thêm CLI smoke test.
  */
 import provider, { isStatsDisabled } from '../../docs/assets/lol-core.js';
+import { unknownSlugs } from '../../docs/assets/leagues.js';
 
 export * from '../../docs/assets/lol-core.js';
 export default provider;
@@ -23,6 +24,8 @@ if (isMain) {
 
   try {
     if (cmd === '--smoke' || !cmd) {
+      await checkLeagueSlugs('lol', provider);
+
       const live = await provider.getLive();
       console.log(`\n=== ĐANG DIỄN RA (${live.length}) ===`);
       live.forEach((e) => console.log(' ', fmt(e)));
@@ -76,6 +79,16 @@ if (isMain) {
     console.error('✗ Lỗi:', err.message);
     process.exit(1);
   }
+}
+
+/**
+ * Slug khai trong bộ lọc mà Riot không có thật -> giải đó biến mất khỏi thông báo
+ * mà không báo lỗi gì. Đây là lỗi câm khó phát hiện nhất của cơ chế lọc.
+ */
+async function checkLeagueSlugs(game, prov) {
+  const bad = unknownSlugs(game, await prov.getLeagues());
+  if (bad.length) console.warn(`\n⚠ Slug giải không tồn tại trong ${game}: ${bad.join(', ')}`);
+  else console.log('✓ Mọi slug trong bộ lọc giải đều có thật');
 }
 
 function printSnapshot(snap) {
