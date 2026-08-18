@@ -1,6 +1,23 @@
 {
-  "_comment": "mode 'all' = thông báo tất cả giải, trừ các slug trong exclude. mode 'include' = chỉ các slug trong include.",
+  "_comment": "mode 'all' = thông báo tất cả giải, trừ các slug trong exclude. mode 'include' = chỉ các slug trong include. Cấu hình gốc ở cấp này áp cho LoL; game khác khai báo trong 'games' và không có mục riêng thì rơi về cấu hình gốc. Slug lấy từ getLeagues của từng game.",
   "mode": "all",
   "exclude": [],
-  "include": ["worlds", "msi", "lck", "lpl", "lec", "lcs", "vcs", "lcp"]
+  "include": ["worlds", "msi", "lck", "lpl", "lec", "lcs", "vcs", "lcp"],
+  "games": {
+    "val": {
+      "_comment": "Valorant có 54 giải. Đang bật tất cả — nếu kênh quá nhiều tin, thêm slug vào exclude (ví dụ game_changers_*, challengers_*, vrl_*, ascension_*) hoặc đổi mode sang 'include'.",
+      "mode": "all",
+      "exclude": [],
+      "include": [
+        "champions",
+        "vct_masters",
+        "vct_americas",
+        "vct_emea",
+        "vct_pacific",
+        "vct_china",
+        "ewc_val",
+        "challengers_sea_vn"
+      ]
+    }
+  }
 }

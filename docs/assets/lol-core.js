@@ -1,17 +1,20 @@
 /**
- * lol-core.js — toàn bộ chỗ chạm vào API LoL Esports của Riot.
+ * lol-core.js — phần riêng của League of Legends.
  *
- * File này là ESM thuần, chỉ dùng `fetch` toàn cục nên chạy được ở CẢ HAI nơi:
+ * Lịch, giải và chi tiết trận chạy trên gateway chung của Riot nên nằm ở
+ * `riot-core.js`; file này chỉ còn phần LoL mới có: **feed livestats** (vàng, hạ
+ * gục, trụ, rồng, KDA/CS từng người). Valorant không có feed tương đương.
+ *
+ * Vẫn là ESM thuần, chỉ dùng `fetch` toàn cục nên chạy được ở CẢ HAI nơi:
  *   - browser  (trang GitHub Pages import trực tiếp)
  *   - Node 22+ (src/providers/lol.js import qua đường dẫn tương đối)
- * Nhờ vậy chỉ có một nguồn sự thật. Riot đổi schema thì chỉ phải sửa file này.
  *
  * API của Riot là API nội bộ, không có cam kết ổn định. Nhưng nó trả
  * `Access-Control-Allow-Origin: *` nên trang tĩnh gọi thẳng được, không cần backend.
  */
+import { createRiotGateway, fetchJson, API_KEY, secureUrl } from './riot-core.js';
 
-/** Key public mà chính web lolesports.com dùng — không phải bí mật, không cần giấu. */
-export const API_KEY = '0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z';
+export { API_KEY, secureUrl };
 
 const ESPORTS_API = 'https://esports-api.lolesports.com/persisted/gw';
 const FEED = 'https://feed.lolesports.com/livestats/v1';
@@ -42,66 +45,28 @@ export function isStatsDisabled(gameId) {
   return statsDisabledGames.has(String(gameId));
 }
 
-/* ------------------------------------------------------------------ helpers */
+/* ------------------------------------------------------- lịch / giải / trận */
 
-/**
- * Response của Riot trả ảnh qua `http://static.lolesports.com/...`.
- * GitHub Pages chạy HTTPS nên browser sẽ chặn mixed-content. Host có hỗ trợ
- * HTTPS, chỉ là response ghi sai scheme, nên rewrite là đủ.
- */
-export function secureUrl(url) {
-  return typeof url === 'string' ? url.replace(/^http:\/\//i, 'https://') : url;
-}
+const gateway = createRiotGateway({
+  id: 'lol',
+  name: 'League of Legends',
+  emoji: ':video_game:',
+  base: ESPORTS_API,
+  live: 'native',
+  capabilities: { liveStats: true, feedDelaySeconds: FEED_DELAY_SECONDS },
+  terms: { unit: 'Ván' },
+});
 
-class HttpError extends Error {
-  constructor(status, url, body) {
-    super(`HTTP ${status} — ${url}${body ? ` — ${body.slice(0, 200)}` : ''}`);
-    this.name = 'HttpError';
-    this.status = status;
-    this.url = url;
-  }
-}
+export const {
+  normalizeEvent,
+  getLeagues,
+  getSchedule,
+  getUpcoming,
+  getLive,
+  getMatch,
+} = gateway;
 
-/**
- * GET JSON với timeout + retry. Trả `null` khi 204 (feed dùng 204 cho
- * "ván chưa có dữ liệu"), nên chỗ gọi phải phân biệt null với object.
- */
-async function fetchJson(url, { headers = {}, timeoutMs = 15000, retries = 2 } = {}) {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    if (attempt > 0) await sleep(300 * 2 ** (attempt - 1));
-    try {
-      const res = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
-      if (res.status === 204) return null;
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        const err = new HttpError(res.status, url, body);
-        // 4xx (trừ 429) là lỗi của mình, retry vô nghĩa.
-        if (res.status >= 400 && res.status < 500 && res.status !== 429) throw err;
-        lastError = err;
-        continue;
-      }
-      return await res.json();
-    } catch (err) {
-      if (err instanceof HttpError && err.status < 500 && err.status !== 429) throw err;
-      lastError = err;
-    }
-  }
-  throw lastError;
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const gwUrl = (path, params = {}) => {
-  const qs = new URLSearchParams({ hl: 'en-US', ...clean(params) });
-  return `${ESPORTS_API}/${path}?${qs}`;
-};
-
-const gw = (path, params) => fetchJson(gwUrl(path, params), { headers: { 'x-api-key': API_KEY } });
-
-function clean(obj) {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null));
-}
+/* ---------------------------------------------------------- feed livestats */
 
 /**
  * Feed chỉ nhận timestamp là bội số của 10 giây và không có mili-giây;
@@ -111,166 +76,6 @@ function clean(obj) {
 export function feedTimestamp(date = new Date(), { lagSeconds = FEED_DELAY_SECONDS } = {}) {
   const ms = date.getTime() - lagSeconds * 1000;
   return new Date(Math.floor(ms / 10000) * 10000).toISOString().replace(/\.\d{3}Z$/, 'Z');
-}
-
-/* ------------------------------------------------------------- chuẩn hoá dữ liệu */
-
-/**
- * Gom event của Riot về shape chung mà Slack, trang web và các game khác
- * đều dùng được. Provider của game mới chỉ cần trả đúng shape này.
- */
-export function normalizeEvent(event) {
-  if (!event) return null;
-  const match = event.match ?? {};
-  return {
-    game: 'lol',
-    id: String(match.id ?? event.id ?? ''),
-    startTime: event.startTime,
-    state: event.state, // unstarted | inProgress | completed
-    blockName: event.blockName ?? null,
-    league: {
-      id: event.league?.id ?? null,
-      name: event.league?.name ?? 'Unknown',
-      slug: event.league?.slug ?? null,
-      image: secureUrl(event.league?.image),
-    },
-    tournamentId: event.tournament?.id ?? null,
-    strategy: {
-      type: match.strategy?.type ?? 'bestOf',
-      count: match.strategy?.count ?? 1,
-    },
-    teams: (match.teams ?? []).map((t) => ({
-      id: t.id ?? null,
-      name: t.name ?? 'TBD',
-      code: t.code ?? '???',
-      image: secureUrl(t.image),
-      record: t.record ?? null, // {wins, losses}
-      wins: t.result?.gameWins ?? 0,
-      outcome: t.result?.outcome ?? null, // win | loss | null
-    })),
-  };
-}
-
-/* ----------------------------------------------------------------- endpoints */
-
-/** Danh mục giải, dùng để build bộ lọc. */
-export async function getLeagues() {
-  const data = await gw('getLeagues');
-  return (data?.data?.leagues ?? []).map((l) => ({
-    id: l.id,
-    slug: l.slug,
-    name: l.name,
-    region: l.region,
-    image: secureUrl(l.image),
-    priority: l.priority,
-  }));
-}
-
-/**
- * Lịch thi đấu. Không truyền gì thì Riot trả ~80 event quanh thời điểm hiện tại
- * (vừa completed vừa unstarted). `pageToken` lấy từ `pages.older` / `pages.newer`.
- */
-export async function getSchedule({ leagueId, pageToken } = {}) {
-  const data = await gw('getSchedule', { leagueId, pageToken });
-  const schedule = data?.data?.schedule ?? {};
-  return {
-    events: (schedule.events ?? []).filter((e) => e.type === 'match').map(normalizeEvent),
-    pages: schedule.pages ?? {},
-  };
-}
-
-/** Các trận đang diễn ra. */
-export async function getLive() {
-  const data = await gw('getLive');
-  return (data?.data?.schedule?.events ?? [])
-    .filter((e) => e.type === 'match' || e.match)
-    .map(normalizeEvent);
-}
-
-/**
- * Trận sắp diễn ra trong `withinMinutes` phút tới, sắp xếp theo giờ bắt đầu.
- * Tự lật sang trang `newer` khi cửa sổ dài hơn dữ liệu trang đầu.
- */
-export async function getUpcoming({ withinMinutes = 60, limit = 50, now = Date.now() } = {}) {
-  const deadline = now + withinMinutes * 60_000;
-  const found = [];
-  let pageToken;
-
-  for (let page = 0; page < 5; page++) {
-    const { events, pages } = await getSchedule({ pageToken });
-    for (const ev of events) {
-      const startsAt = Date.parse(ev.startTime);
-      if (ev.state === 'unstarted' && startsAt >= now && startsAt <= deadline) found.push(ev);
-    }
-    // Còn dữ liệu chưa quét hết cửa sổ thì mới sang trang tiếp.
-    const latest = events.reduce((max, e) => Math.max(max, Date.parse(e.startTime) || 0), 0);
-    if (!pages.newer || latest >= deadline || events.length === 0) break;
-    pageToken = pages.newer;
-  }
-
-  return found.sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime)).slice(0, limit);
-}
-
-/**
- * Chi tiết một series: thông tin trận + danh sách ván (gameId) kèm trạng thái.
- *
- * `getEventDetails` KHÔNG trả `startTime`, `state`, `blockName` hay thành tích
- * đội — chỉ có đội, tỉ số và danh sách ván. Nên `state` được suy ra từ các ván,
- * còn phần lịch được bù lại từ getLive/getSchedule (tắt bằng `enrich: false`
- * nếu chỉ cần chỉ số và muốn tiết kiệm request).
- */
-export async function getMatch(matchId, { enrich = true } = {}) {
-  const data = await gw('getEventDetails', { id: matchId });
-  const event = data?.data?.event;
-  if (!event) return null;
-
-  const normalized = normalizeEvent({ ...event, id: event.id ?? matchId, type: 'match' });
-  normalized.id = String(matchId);
-  normalized.games = (event.match?.games ?? []).map((g) => ({
-    id: String(g.id),
-    number: g.number,
-    state: g.state, // unstarted | inProgress | completed
-    vods: g.vods ?? [],
-  }));
-  normalized.streams = (event.streams ?? []).map((s) => ({
-    provider: s.provider,
-    parameter: s.parameter,
-    locale: s.locale,
-  }));
-  normalized.state = deriveState(normalized.games);
-
-  if (enrich) {
-    const scheduled = await findScheduledEvent(matchId).catch(() => null);
-    if (scheduled) {
-      normalized.startTime ??= scheduled.startTime;
-      normalized.blockName ??= scheduled.blockName;
-      normalized.state = scheduled.state ?? normalized.state;
-      normalized.strategy = scheduled.strategy ?? normalized.strategy;
-      for (const team of normalized.teams) {
-        team.record ??= scheduled.teams.find((t) => t.id === team.id || t.code === team.code)?.record ?? null;
-      }
-    }
-  }
-
-  return normalized;
-}
-
-function deriveState(games) {
-  if (!games.length) return 'unstarted';
-  if (games.some((g) => g.state === 'inProgress')) return 'inProgress';
-  if (games.every((g) => g.state === 'completed')) return 'completed';
-  return games.some((g) => g.state === 'completed') ? 'inProgress' : 'unstarted';
-}
-
-/** Tìm trận trong getLive (nhẹ) rồi mới tới getSchedule. */
-async function findScheduledEvent(matchId) {
-  const id = String(matchId);
-  const live = await getLive();
-  const fromLive = live.find((e) => e.id === id);
-  if (fromLive) return fromLive;
-
-  const { events } = await getSchedule();
-  return events.find((e) => e.id === id) ?? null;
 }
 
 /**
@@ -463,22 +268,15 @@ export async function getTimeline(gameId, {
 
 /* ------------------------------------------------------------------ provider */
 
-/**
- * Interface mà mọi game phải implement. Thêm Valorant/CS2 = thêm một file
- * export đúng các hàm này rồi đăng ký vào providers/index.js.
- */
+/** Interface đầy đủ của game — xem định nghĩa chuẩn ở `docs/assets/games.js`. */
 export const lolProvider = {
-  id: 'lol',
-  name: 'League of Legends',
-  emoji: ':video_game:',
-  getLeagues,
-  getSchedule,
-  getUpcoming,
-  getLive,
-  getMatch,
+  ...gateway,
   getGameSnapshot,
   getGameStart,
   getTimeline,
+  getWindow,
+  getDetails,
+  isStatsDisabled,
 };
 
 export default lolProvider;

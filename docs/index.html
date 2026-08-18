@@ -3,14 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Esports Hub — lịch thi đấu LoL</title>
-    <meta name="description" content="Lịch thi đấu và chỉ số realtime các trận League of Legends esports." />
+    <title>Esports Hub — lịch thi đấu esports</title>
+    <meta name="description" content="Lịch thi đấu và chỉ số realtime các trận League of Legends và VALORANT esports." />
     <link rel="stylesheet" href="./assets/styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>🎮</text></svg>" />
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="./">Esports Hub <span>· LoL</span></a>
+      <a class="brand" href="./">Esports Hub <span id="brand-game">· LoL</span></a>
+      <nav class="game-switch" id="game-switch" aria-label="Chọn game"></nav>
       <form class="lookup" id="lookup">
         <input
           id="match-id"
@@ -48,7 +49,7 @@
         <div class="match-list" id="upcoming-list"></div>
       </section>
 
-      <p class="notice">
+      <p class="notice" id="delay-notice">
         Nguồn: API esports công khai của Riot. Chỉ số trong trận trễ khoảng 3,5 phút so với sóng
         trực tiếp — đây là giới hạn Riot đặt ra để chống ăn gian, không phải lỗi trang.
       </p>
@@ -56,10 +57,13 @@
 
     <script type="module" src="./assets/index-page.js"></script>
     <script type="module">
+      // Giữ nguyên game đang xem khi mở trận: dán ID Valorant ở view Valorant mà
+      // rơi về trang LoL thì chỉ báo "không tìm thấy trận".
+      import { gameFromSearch, matchHref } from './assets/games.js';
       document.getElementById('lookup').addEventListener('submit', (e) => {
         e.preventDefault();
         const id = document.getElementById('match-id').value.trim();
-        if (id) location.href = `./match.html?match=${encodeURIComponent(id)}`;
+        if (id) location.href = matchHref(id, gameFromSearch(location.search));
       });
     </script>
   </body>

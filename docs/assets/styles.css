@@ -84,6 +84,32 @@ h3 {
   font-weight: 400;
 }
 
+/* Chuyển game — nằm cạnh brand, không phải nav chính nên giữ thật nhẹ. */
+.game-switch {
+  display: flex;
+  gap: 4px;
+}
+
+.game-tab {
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--muted);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.game-tab:hover {
+  color: var(--ink-2);
+}
+
+.game-tab[aria-current="page"] {
+  color: var(--ink);
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
 .lookup {
   display: flex;
   gap: 8px;
@@ -207,6 +233,12 @@ main {
 
 .badge--upcoming::before {
   background: var(--gold);
+}
+
+/* Map thừa của Bo3/Bo5 đã ngã ngũ: mờ hẳn đi vì nó không bao giờ được đá. */
+.badge--skipped {
+  color: var(--muted);
+  opacity: 0.7;
 }
 
 @keyframes pulse {

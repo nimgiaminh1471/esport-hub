@@ -65,6 +65,8 @@ const STATE_LABEL = {
   inProgress: ['Đang diễn ra', 'badge--live'],
   unstarted: ['Sắp diễn ra', 'badge--upcoming'],
   completed: ['Đã kết thúc', 'badge--done'],
+  // Map thừa của Bo3/Bo5 đã ngã ngũ — Valorant dùng, LoL không thấy trả về.
+  unneeded: ['Không cần đá', 'badge--skipped'],
 };
 
 export function stateBadge(state) {

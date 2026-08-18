@@ -1,5 +1,5 @@
 /** Trang chi tiết một trận: chỉ số realtime, biểu đồ chênh lệch vàng, bảng người chơi. */
-import * as lol from './lol-core.js';
+import { getProvider, gameFromSearch } from './games.js';
 import { loadAssets } from './ddragon.js';
 import { renderGoldDiffChart } from './chart.js';
 import {
@@ -10,12 +10,27 @@ import {
 const GAME_POLL_MS = 10_000;
 const MATCH_POLL_MS = 30_000;
 
+// Tên `sport` chứ không phải `game`: trong file này `game` đã mang nghĩa "một ván".
+const sport = gameFromSearch(location.search);
+const provider = getProvider(sport);
+const unit = provider.terms?.unit ?? 'Ván';
+
 /** Riot tắt livestats cả giải, poll lại cũng không có gì — xem `isStatsDisabled`. */
 const NO_LIVESTATS_MSG =
   'Riot không mở livestats cho ván này (thường gặp ở các giải khu vực), nên không có chỉ số trực tiếp. Lịch, tỉ số và kết quả vẫn cập nhật bình thường.';
 
+/**
+ * Game không hề có feed chỉ số (Valorant). Nói rõ đây là giới hạn VĨNH VIỄN chứ
+ * không phải "sắp có" — Riot không phát hành feed livestats cho Valorant, không
+ * có endpoint nào khác để tìm.
+ */
+const NO_FEED_MSG =
+  `Riot không cung cấp feed chỉ số trong trận cho ${provider.name}, nên trang này chỉ có ` +
+  'lịch, tỉ số series và danh sách map. Đây là giới hạn của Riot, không phải lỗi.';
+
 const dom = {
   status: document.getElementById('status'),
+  brand: document.getElementById('brand-game'),
   head: document.getElementById('head'),
   games: document.getElementById('games'),
   chart: document.getElementById('chart'),
@@ -39,6 +54,8 @@ const state = {
   playersView: 'lane',
 };
 
+if (dom.brand) dom.brand.textContent = `· ${sport === 'lol' ? 'LoL' : provider.name}`;
+
 boot().catch((err) => setStatus(dom.status, `Không tải được trận: ${err.message}`, true));
 
 async function boot() {
@@ -53,23 +70,31 @@ async function boot() {
 
   // Chỉ có gameId thì lấy ngược matchId ra từ feed. Hỏi frame đầu ván vì ván bị
   // tắt livestats vẫn trả về frame đó — vẫn đủ để biết ván thuộc trận nào.
+  // Không có feed thì không tra ngược được, phải yêu cầu ID trận.
   if (!state.matchId) {
-    const window = await lol.getWindow(state.gameId, { fromStart: true });
+    if (!provider.capabilities.liveStats) {
+      setStatus(dom.status, `Trang ${provider.name} cần ID trận (\`?match=\`) — không tra ngược được từ ID map.`);
+      return;
+    }
+    const window = await provider.getWindow(state.gameId, { fromStart: true });
     if (!window) throw new Error('Không tìm thấy dữ liệu cho ID ván này.');
     state.matchId = String(window.esportsMatchId);
   }
 
-  state.assets = await loadAssets();
+  // Ảnh tướng/trang bị là chuyện riêng của LoL — game khác nạp về cũng vô ích.
+  if (provider.capabilities.liveStats) state.assets = await loadAssets();
 
   await refreshMatch();
   // Không ẩn #status ở đây: refreshGame() dùng chính chỗ này để báo
   // "ván chưa bắt đầu", và render() sẽ tự ẩn khi có số liệu.
   await refreshGame();
 
-  state.timers.push(
-    setInterval(() => refreshGame().catch(reportSoftError), GAME_POLL_MS),
-    setInterval(() => refreshMatch().catch(reportSoftError), MATCH_POLL_MS),
-  );
+  state.timers.push(setInterval(() => refreshMatch().catch(reportSoftError), MATCH_POLL_MS));
+
+  // Không có chỉ số thì không có gì để poll mỗi 10 giây.
+  if (!provider.capabilities.liveStats) return;
+
+  state.timers.push(setInterval(() => refreshGame().catch(reportSoftError), GAME_POLL_MS));
 
   // Tab ẩn thì ngừng poll cho đỡ tốn pin và request.
   document.addEventListener('visibilitychange', () => {
@@ -80,7 +105,7 @@ async function boot() {
 /* ------------------------------------------------------------------ nạp dữ liệu */
 
 async function refreshMatch() {
-  const match = await lol.getMatch(state.matchId);
+  const match = await provider.getMatch(state.matchId);
   if (!match) throw new Error('Không tìm thấy trận với ID này.');
   state.match = match;
 
@@ -104,22 +129,29 @@ function pickGame(match) {
 }
 
 async function refreshGame() {
+  // Game không có feed thì không bao giờ có chỉ số — nói thẳng thay vì để người
+  // đọc tưởng "ván chưa bắt đầu" trên một series đã xong từ lâu.
+  if (!provider.capabilities.liveStats) {
+    renderNoGame(NO_FEED_MSG);
+    return;
+  }
+
   if (!state.gameId) {
-    renderNoGame('Trận chưa bắt đầu — chưa có ván nào để hiển thị chỉ số.');
+    renderNoGame(`Trận chưa bắt đầu — chưa có ${unit.toLowerCase()} nào để hiển thị chỉ số.`);
     return;
   }
 
   if (document.hidden) return;
 
-  if (lol.isStatsDisabled(state.gameId)) {
+  if (provider.isStatsDisabled(state.gameId)) {
     renderNoGame(NO_LIVESTATS_MSG);
     return;
   }
 
-  const snapshot = await lol.getGameSnapshot(state.gameId);
+  const snapshot = await provider.getGameSnapshot(state.gameId);
   if (!snapshot) {
     renderNoGame(
-      lol.isStatsDisabled(state.gameId)
+      provider.isStatsDisabled(state.gameId)
         ? NO_LIVESTATS_MSG
         : 'Ván này chưa bắt đầu. Số liệu sẽ xuất hiện sau khi vào game.',
     );
@@ -133,7 +165,7 @@ async function refreshGame() {
     state.timeline = [];
     // Mọi điểm phải cùng gốc thời gian là lúc ván bắt đầu, nếu không thì các
     // điểm tích luỹ khi mở trang sẽ lệch hẳn so với phần lịch sử nạp về.
-    state.gameStartMs = Date.parse((await lol.getGameStart(snapshot.gameId)) ?? snapshot.timestamp);
+    state.gameStartMs = Date.parse((await provider.getGameStart(snapshot.gameId)) ?? snapshot.timestamp);
     appendTimelinePoint(snapshot);
     loadTimeline(snapshot.gameId).catch(() => {});
   } else {
@@ -146,7 +178,7 @@ async function refreshGame() {
 /** Lấy lịch sử để biểu đồ có hình ngay từ lần mở đầu tiên. */
 async function loadTimeline(gameId) {
   const startTime = new Date(state.gameStartMs).toISOString();
-  const history = await lol.getTimeline(gameId, { startTime, maxSamples: 40 });
+  const history = await provider.getTimeline(gameId, { startTime, maxSamples: 40 });
   if (state.gameId !== gameId || !history.length) return;
 
   // Gộp theo bin 30 giây; điểm tích luỹ tại chỗ (mới hơn) thắng điểm lịch sử.
@@ -189,7 +221,7 @@ function render() {
 
 function renderUpdated() {
   if (!dom.updated || !state.snapshot) return;
-  const delay = (lol.FEED_DELAY_SECONDS / 60).toFixed(1).replace('.', ',');
+  const delay = (provider.capabilities.feedDelaySeconds / 60).toFixed(1).replace('.', ',');
   const patch = String(state.snapshot.patch ?? '').split('.').slice(0, 2).join('.') || '—';
   dom.updated.style.color = '';
   dom.updated.textContent =
@@ -237,7 +269,9 @@ function renderHead(match) {
 }
 
 function renderGameTabs(match) {
-  if (match.games.length <= 1) {
+  // Tab chỉ để chọn ván xem chỉ số. Game không có chỉ số thì bấm vào cũng ra
+  // đúng một thông báo — bảng "Các map" bên dưới đã nói đủ rồi.
+  if (match.games.length <= 1 || !provider.capabilities.liveStats) {
     dom.games.hidden = true;
     return;
   }
@@ -249,8 +283,10 @@ function renderGameTabs(match) {
         role: 'tab',
         'data-state': game.state,
         'aria-selected': String(game.id === state.gameId),
-        text: `Ván ${game.number}`,
-        disabled: game.state === 'unstarted',
+        text: `${unit} ${game.number}`,
+        // `unneeded` (map thừa của Bo3 đã ngã ngũ) cũng không bấm được — nếu chỉ
+        // chặn 'unstarted' thì nó hiện ra như nút bấm được nhưng dẫn tới hư không.
+        disabled: !['completed', 'inProgress'].includes(game.state),
         onclick: () => {
           state.gameId = game.id;
           state.timeline = [];
@@ -268,6 +304,56 @@ function renderGameTabs(match) {
 function renderNoGame(message) {
   for (const node of [dom.chart, dom.compare, dom.players]) node.hidden = true;
   setStatus(dom.status, message);
+
+  // Không có chỉ số không có nghĩa là không có gì để xem: danh sách map, phe
+  // xanh/đỏ từng map và link VOD đều có sẵn trong getEventDetails.
+  if (!provider.capabilities.liveStats && state.match) renderMapList(state.match);
+}
+
+/**
+ * Bảng map cho game không có feed chỉ số.
+ *
+ * Riot KHÔNG trả tên map (Bind/Haven/...) lẫn tỉ số từng map — chỉ có số thứ tự,
+ * trạng thái, phe xanh/đỏ và VOD. Nên ở đây chỉ hiện đúng chừng đó, không bịa.
+ */
+function renderMapList(match) {
+  const teamName = (id) => match.teams.find((t) => t.id === id)?.code ?? '—';
+
+  const rows = match.games.map((game) => {
+    const blue = game.teams.find((t) => t.side === 'blue');
+    const red = game.teams.find((t) => t.side === 'red');
+    const vod = game.vods?.[0];
+
+    return el('div', { class: 'compare-row' }, [
+      el('div', { class: 'v v--blue', text: blue ? teamName(blue.id) : '' }),
+      el('div', { class: 'mid' }, [
+        el('div', { class: 'label', text: `${unit} ${game.number}` }),
+        el('div', {}, [stateBadge(game.state)]),
+      ]),
+      el('div', { class: 'v v--red' }, [
+        el('span', { text: red ? teamName(red.id) : '' }),
+        vod?.parameter
+          ? el('a', {
+              class: 'chip',
+              style: 'margin-left:8px',
+              href: `https://youtu.be/${encodeURIComponent(vod.parameter)}`,
+              target: '_blank',
+              rel: 'noopener',
+              text: 'VOD',
+            })
+          : null,
+      ]),
+    ]);
+  });
+
+  clear(dom.compare).append(
+    el('header', {}, [
+      el('h2', { text: `Các ${unit.toLowerCase()}` }),
+      el('span', { class: 'eyebrow', text: 'phe xanh · đỏ' }),
+    ]),
+    ...rows,
+  );
+  dom.compare.hidden = false;
 }
 
 /** Đội xanh/đỏ đổi theo từng ván, nên phải khớp lại bằng id đội mỗi lần render. */

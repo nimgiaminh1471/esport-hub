@@ -5,13 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run smoke        # hit the real Riot API: prints live matches, 24h schedule, one game's stats
+npm run smoke        # LoL: live matches, 24h schedule, one game's stats
+npm run smoke:val    # Valorant: leagues, live, 24h schedule, one series' map list
 npm run notify:dry   # run the cron entrypoint, print Block Kit to stdout, send nothing to Slack
 npm run notify       # send for real (needs .env with SLACK_BOT_TOKEN + SLACK_CHANNEL_ID)
 npm run serve        # static server for docs/ on http://localhost:8080
 
-node src/providers/lol.js --stats <gameId>    # one game's live stats
-node src/providers/lol.js --match <matchId>   # full match JSON
+node src/providers/lol.js --stats <gameId>       # one game's live stats
+node src/providers/lol.js --match <matchId>      # full match JSON
+node src/providers/valorant.js --match <matchId> # series + map list (no stats exist)
+GAME=val npm run notify:dry                      # only Valorant
 
 cd worker && npx wrangler dev      # slash command locally (needs worker/.dev.vars)
 cd worker && npx wrangler deploy
@@ -23,7 +26,7 @@ against live data:
 
 - `npm run smoke` — checks the provider layer end to end.
 - `npm run notify:dry` **twice in a row** — the dedup check. The second run must print no
-  messages. Delete `state/announced.json` to make them reappear.
+  messages for either game. Delete `state/announced*.json` to make them reappear.
 
 ## Architecture
 
@@ -31,22 +34,22 @@ Three surfaces, none of which needs a long-running server:
 
 | Surface | Runs on | Job |
 |---|---|---|
-| `src/notify.js` | GitHub Actions cron, every 5 min | announce upcoming / started / finished matches |
-| `worker/src/index.js` | Cloudflare Workers | `/lol schedule`, `/lol live`, `/lol match <id>` |
-| `docs/` | GitHub Pages | live in-game stats page, polls every 10s |
+| `src/notify.js` | GitHub Actions cron, every 5 min | announce upcoming / started / finished, for every registered game |
+| `worker/src/index.js` | Cloudflare Workers | `/lol` and `/val` — `schedule`, `live`, `match <id>` |
+| `docs/` | GitHub Pages | schedule + live in-game stats (LoL only), polls every 10s |
 
-### `docs/assets/lol-core.js` is the single source of truth
+### `docs/assets/` is the single source of truth
 
-Every call to Riot's API lives in that one file, and all three surfaces import it:
+Every call to Riot's API lives in `docs/assets/*-core.js`, and all three surfaces import them:
 
 ```
-docs/assets/lol-core.js
-  ├── src/providers/lol.js       (Node, relative import + CLI)
+docs/assets/riot-core.js + <game>-core.js + games.js
+  ├── src/providers/*.js         (Node, relative import + CLI)
   ├── docs/assets/*-page.js      (browser, direct ESM import)
   └── worker/src/index.js        (wrangler bundles it)
 ```
 
-**This constrains what may go in it.** `lol-core.js` must stay plain ESM using only globals
+**This constrains what may go in them.** Every `*-core.js` must stay plain ESM using only globals
 available in both Node 22+ and browsers (`fetch`, `AbortSignal.timeout`, `crypto`) — no
 `node:*` imports, no DOM, no dependencies. `src/lib/blocks.js` has the same constraint (it is
 shared by the Node cron and the Worker). `docs/assets/ddragon.js` may use `localStorage`
@@ -55,16 +58,61 @@ because only the browser imports it.
 Consequence: `docs/` is not just the published site, it is also a source directory that Node
 and the Worker import from. Moving or renaming files there breaks the bot.
 
-### Adding another game
+### Multi-game
 
-1. Write `docs/assets/<game>-core.js` exporting the same interface as `lolProvider` in
-   `lol-core.js` (`getSchedule`, `getUpcoming`, `getLive`, `getMatch`, `getGameSnapshot`,
-   `getLeagues`, `getGameStart`, `getTimeline`).
-2. `src/providers/<game>.js` re-exports it.
-3. Add one line to `src/providers/index.js`.
+Two games ship today: `lol` and `val` (VALORANT). **The canonical provider interface — which
+methods are required, which are capability-gated, and how to add a third game — is the header
+comment of [docs/assets/games.js](docs/assets/games.js).** Do not restate it here or in the
+README; three copies had already drifted apart before it was consolidated.
 
-Slack blocks, the workflow, and the web pages need no changes — they only consume the
-normalized event shape produced by `normalizeEvent`.
+The layering:
+
+```
+docs/assets/riot-core.js    transport + createRiotGateway() — no game knowledge
+  ├── lol-core.js           gateway('native' live) + the livestats feed
+  └── val-core.js           gateway(sport:'val', 'derive' live) + null stubs
+docs/assets/games.js        the registry all three surfaces import
+```
+
+`docs/assets/games.js` is the single registry; `src/providers/index.js` is only a re-export so
+`src/` keeps its familiar import path. It must live in `docs/` because that is the only
+directory Node, the Worker and the browser can all reach.
+
+**Capabilities, not `if (game === 'lol')`.** A provider declares
+`capabilities.liveStats`. Games without it still expose `getGameSnapshot`/`getTimeline`/etc.
+returning `null`/`[]` — every caller already null-guards (Riot returns 204 for a game that
+hasn't started), so nothing needs `?.`. The flag exists to fix *messaging* and skip wasted
+work, and only three places read it: the Worker's `match` case, `match-page.js`, and the
+Valorant smoke CLI.
+
+### Valorant has no in-match stats — permanently
+
+Riot publishes no livestats feed for Valorant. `feed.valorantesports.com` does not resolve at
+all, and the LoL feed returns 204 for Valorant game IDs. `getLive` also 400s on every variant,
+so `val-core.js` derives it by filtering `getSchedule()` for `inProgress`. Do not go hunting
+for another endpoint — verify with a request before believing any claim otherwise.
+
+Valorant also adds the game state **`"unneeded"`** (unplayed maps in a decided Bo3) and per-map
+`teams[].side`, and returns **no map names** (Bind/Haven…) — only map numbers.
+
+### `?sport=`, never `?game=`, for selecting the game
+
+`?game=` was already taken: `match.html?game=<gameId>` selects a *map*, and it is documented in
+the README. The sport travels as `?sport=val`; LoL omits it entirely so every existing URL is
+byte-identical. See `gameFromSearch` / `matchHref` in `games.js` and `matchUrl` in
+`src/lib/config.js`.
+
+### One process, all games — not a workflow matrix
+
+`src/notify.js` loops every registered game in one process (`GAME=val` narrows it for local
+testing). A matrix would race: `concurrency: {group: notify}` serialises workflow *runs*, not
+matrix legs, so two legs would both `git add state/` and the rebase-retry loop would hit a
+conflict rather than a merge. Each game gets its own try/catch and its own state file
+(`state/announced.json` for LoL, `state/announced-<game>.json` otherwise), with
+`process.exitCode` set only after every game has saved.
+
+League filtering is per-game under `games.<id>` in `config/leagues.json`; a game with no entry
+falls back to the top-level config, which is why LoL's behaviour is provably unchanged.
 
 ### Dedup is state-based, not time-based
 
@@ -109,8 +157,11 @@ straight to the finished message — one lost message, never wrong data.
 
 - Env vars are read in `src/lib/config.js` only. `.env.example` documents them; `DRY_RUN=1`
   bypasses the Slack-config assertion.
-- League filtering lives in `config/leagues.json` (`mode: "all"` + `exclude`, or
-  `mode: "include"`). Slugs come from `getLeagues`. Default is all leagues, which is noisy.
+- League filtering lives in `config/leagues.json`, per game under `games.<id>` (`mode: "all"`
+  + `exclude`, or `mode: "include"`). Slugs come from that game's `getLeagues`. Default is all
+  leagues. Valorant has 54 league slugs but only ~5 matches/24h in practice, because most
+  regional circuits are not in season simultaneously — measure with `GAME=val npm run
+  notify:dry` before assuming a flood.
 - The Worker holds the only real secret (`SLACK_SIGNING_SECRET`, via `wrangler secret put` or
   `worker/.dev.vars`). `PAGES_BASE_URL` is a plain var in `wrangler.toml`.
 - Slack gives slash commands 3 seconds; the Worker races the work against `FAST_PATH_MS`

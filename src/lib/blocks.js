@@ -2,6 +2,10 @@
  * Dựng Block Kit cho Slack. Dùng chung cho cron (src/notify.js) và slash command
  * (worker/src/index.js), nên không được import gì thuộc riêng Node.
  */
+import { providers } from '../../docs/assets/games.js';
+
+/** LoL gọi là "Ván", Valorant gọi là "Map" — lấy từ registry cho khỏi lệch. */
+const unitOf = (event) => providers[event?.game]?.terms?.unit ?? 'Ván';
 
 /**
  * `<!date^unix^format|fallback>` để Slack hiển thị theo múi giờ của từng người
@@ -153,7 +157,9 @@ export function matchMessage(match, snapshot, url) {
       elements: [
         {
           type: 'mrkdwn',
-          text: match.games.map((g) => `Ván ${g.number}: ${STATE_TEXT[g.state] ?? g.state}`).join('  ·  '),
+          text: match.games
+            .map((g) => `${unitOf(match)} ${g.number}: ${STATE_TEXT[g.state] ?? g.state}`)
+            .join('  ·  '),
         },
       ],
     });
@@ -180,4 +186,6 @@ const STATE_TEXT = {
   unstarted: 'chưa bắt đầu',
   inProgress: 'đang diễn ra',
   completed: 'đã kết thúc',
+  // Map thừa của Bo3/Bo5 đã ngã ngũ — Valorant dùng, LoL không thấy trả về.
+  unneeded: 'không cần đá',
 };

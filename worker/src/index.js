@@ -1,15 +1,19 @@
 /**
- * Cloudflare Worker phục vụ slash command `/lol`.
+ * Cloudflare Worker phục vụ slash command `/lol` và `/val`.
  *
  * Vì sao cần Worker: slash command bắt buộc phải có một endpoint HTTP trả lời
  * Slack trong 3 giây. GitHub Actions cron không nhận request nên không làm được
  * việc này — nó chỉ lo phần tự động thông báo. Worker chạy miễn phí, không phải
  * duy trì máy chủ, và cũng là chỗ duy nhất cần giữ bí mật (signing secret).
  *
- * Import thẳng lol-core.js và blocks.js của dự án — wrangler tự bundle, nên
- * logic gọi API và dựng Block Kit không bị viết lại lần hai.
+ * Import thẳng registry và blocks.js của dự án — wrangler tự bundle, nên logic
+ * gọi API và dựng Block Kit không bị viết lại lần hai.
+ *
+ * Nhiều game dùng CHUNG một Worker: Slack gửi kèm `body.command` (`/lol` hay
+ * `/val`) nên chỉ cần đăng ký thêm slash command trỏ vào ĐÚNG URL cũ, không phải
+ * deploy thêm gì.
  */
-import * as lol from '../../docs/assets/lol-core.js';
+import { getProvider, resolveGame, DEFAULT_GAME } from '../../docs/assets/games.js';
 import { scheduleMessage, matchMessage } from '../../src/lib/blocks.js';
 
 /** Slack huỷ kết nối sau 3s; chốt 2,5s rồi chuyển sang trả lời trễ qua response_url. */
@@ -54,7 +58,21 @@ export default {
 
 /* ------------------------------------------------------------------ định tuyến */
 
-async function handleCommand(body, env) {
+export async function handleCommand(body, env = {}) {
+  const cmd = String(body.command ?? '').trim();
+  const game = cmd ? resolveGame(cmd) : DEFAULT_GAME;
+
+  // Không được im lặng rơi về game mặc định: nếu ai đó đăng ký lệnh `/valorant2`
+  // mà registry không nhận ra, fallback sẽ phục vụ dữ liệu LoL dưới một lệnh
+  // Valorant — trông vẫn như đang chạy tốt nên rất lâu mới phát hiện ra.
+  if (!game) {
+    return {
+      response_type: 'ephemeral',
+      text: `Lệnh \`${cmd}\` chưa được nối với game nào. Hiện có: \`/lol\`, \`/val\`.`,
+    };
+  }
+
+  const provider = getProvider(game);
   const args = (body.text ?? '').trim().split(/\s+/).filter(Boolean);
 
   // `--share` / `công khai` ở bất kỳ đâu trong lệnh sẽ đăng cho cả kênh thấy.
@@ -63,8 +81,14 @@ async function handleCommand(body, env) {
   if (share) args.splice(shareIndex, 1);
 
   const [sub = 'help', ...rest] = args;
-  const url = (matchId) =>
-    env.PAGES_BASE_URL ? `${env.PAGES_BASE_URL.replace(/\/+$/, '')}/match.html?match=${matchId}` : null;
+  const self = cmd || `/${game}`;
+  const url = (matchId) => {
+    if (!env.PAGES_BASE_URL) return null;
+    // `?game=` đã bị dùng cho id ván; môn thể thao đi bằng `?sport=`. LoL không
+    // gắn gì để link cũ giữ nguyên.
+    const sport = game === DEFAULT_GAME ? '' : `&sport=${encodeURIComponent(game)}`;
+    return `${env.PAGES_BASE_URL.replace(/\/+$/, '')}/match.html?match=${matchId}${sport}`;
+  };
   const responseType = share ? 'in_channel' : 'ephemeral';
 
   switch (sub) {
@@ -72,7 +96,7 @@ async function handleCommand(body, env) {
     case 'lich':
     case 'lịch': {
       const hours = Number(rest[0]) || 24;
-      const events = await lol.getUpcoming({ withinMinutes: hours * 60, limit: 20 });
+      const events = await provider.getUpcoming({ withinMinutes: hours * 60, limit: 20 });
       return { response_type: responseType, ...scheduleMessage(events, {
         title: `Lịch thi đấu ${hours} giờ tới`,
         empty: `Không có trận nào trong ${hours} giờ tới.`,
@@ -83,7 +107,7 @@ async function handleCommand(body, env) {
     case 'live':
     case 'dang':
     case 'đang': {
-      const events = await lol.getLive();
+      const events = await provider.getLive();
       return { response_type: responseType, ...scheduleMessage(events, {
         title: 'Trận đang diễn ra',
         empty: 'Hiện không có trận nào đang diễn ra.',
@@ -96,16 +120,21 @@ async function handleCommand(body, env) {
     case 'trận': {
       const id = rest[0];
       if (!/^\d+$/.test(id ?? '')) {
-        return { response_type: 'ephemeral', text: 'Cần ID trận dạng số. Ví dụ: `/lol match 116878159559860047`' };
+        return { response_type: 'ephemeral', text: `Cần ID trận dạng số. Ví dụ: \`${self} match 116878159559860047\`` };
       }
 
-      const match = await lol.getMatch(id);
+      const match = await provider.getMatch(id);
       if (!match) return { response_type: 'ephemeral', text: `Không tìm thấy trận \`${id}\`.` };
 
-      const playable =
-        match.games.find((g) => g.state === 'inProgress') ??
-        match.games.findLast((g) => g.state === 'completed');
-      const snapshot = playable ? await lol.getGameSnapshot(playable.id, { withDetails: false }).catch(() => null) : null;
+      // Game không có feed chỉ số (Valorant) thì bỏ hẳn bước này — matchMessage
+      // đã bọc phần chỉ số trong `if (snapshot)` nên truyền null là an toàn.
+      const playable = provider.capabilities.liveStats
+        ? match.games.find((g) => g.state === 'inProgress') ??
+          match.games.findLast((g) => g.state === 'completed')
+        : null;
+      const snapshot = playable
+        ? await provider.getGameSnapshot(playable.id, { withDetails: false }).catch(() => null)
+        : null;
 
       return { response_type: responseType, ...matchMessage(match, snapshot, url(id)) };
     }
@@ -114,10 +143,10 @@ async function handleCommand(body, env) {
       return {
         response_type: 'ephemeral',
         text: [
-          '*Esports Hub — các lệnh*',
-          '`/lol schedule [số giờ]` — lịch thi đấu sắp tới (mặc định 24 giờ)',
-          '`/lol live` — các trận đang diễn ra',
-          '`/lol match <id>` — chi tiết và chỉ số một trận',
+          `*Esports Hub — ${provider.name}*`,
+          `\`${self} schedule [số giờ]\` — lịch thi đấu sắp tới (mặc định 24 giờ)`,
+          `\`${self} live\` — các trận đang diễn ra`,
+          `\`${self} match <id>\` — chi tiết${provider.capabilities.liveStats ? ' và chỉ số' : ''} một trận`,
           '',
           'Thêm `--share` vào cuối để đăng cho cả kênh thấy thay vì chỉ mình bạn.',
         ].join('\n'),

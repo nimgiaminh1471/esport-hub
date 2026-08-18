@@ -1,25 +1,17 @@
 /**
- * Registry provider theo game.
+ * Registry provider cho phía Node.
  *
- * Thêm game mới:
- *   1. Viết `docs/assets/<game>-core.js` export đúng interface của lol-core.js
- *      (getUpcoming, getLive, getMatch, getGameSnapshot, getLeagues, getSchedule).
- *   2. Tạo `src/providers/<game>.js` re-export core đó.
- *   3. Thêm một dòng vào đây.
- * Không phần nào khác của bot cần sửa.
+ * Registry thật nằm ở `docs/assets/games.js` — cùng chỗ với các file core, vì đó
+ * là thư mục duy nhất mà cả ba mặt (Node, Worker, browser) đều với tới được.
+ * File này chỉ re-export để `src/` giữ nguyên đường import quen thuộc.
+ *
+ * Định nghĩa interface của một provider và hướng dẫn thêm game mới: xem comment
+ * đầu `docs/assets/games.js`.
  */
-import lol from './lol.js';
-
-export const providers = { lol };
-
-export const DEFAULT_GAME = 'lol';
-
-export function getProvider(game = DEFAULT_GAME) {
-  const provider = providers[game];
-  if (!provider) {
-    throw new Error(`Chưa hỗ trợ game "${game}". Hiện có: ${Object.keys(providers).join(', ')}`);
-  }
-  return provider;
-}
-
-export default providers;
+export {
+  providers,
+  DEFAULT_GAME,
+  getProvider,
+  resolveGame,
+  default as default,
+} from '../../docs/assets/games.js';
