@@ -1,5 +1,12 @@
 {
   "version": 1,
   "game": "val",
-  "matches": {}
+  "matches": {
+    "116849606242238823": {
+      "state": "unstarted",
+      "slackTs": "1787063453.543739",
+      "announcedAt": "2026-08-18T14:30:53.609Z",
+      "updatedAt": "2026-08-18T14:30:53.609Z"
+    }
+  }
 }
