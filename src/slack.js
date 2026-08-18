@@ -36,6 +36,28 @@ export async function postMessage({ text, blocks, threadTs }) {
 
   const data = await res.json();
   // Slack trả HTTP 200 kể cả khi lỗi — phải xem cờ `ok` mới biết.
-  if (!data.ok) throw new Error(`Slack từ chối: ${data.error}${data.errors ? ` ${JSON.stringify(data.errors)}` : ''}`);
+  if (!data.ok) throw new Error(describeError(data));
   return { ts: data.ts };
+}
+
+/**
+ * Log của cron là thứ duy nhất người sửa nhìn thấy, nên nhét luôn cách khắc phục
+ * vào message. Riêng `missing_scope` Slack có trả kèm `needed`/`provided` —
+ * không in ra thì không biết thiếu scope nào.
+ */
+function describeError(data) {
+  const hints = {
+    missing_scope: 'thêm scope vào Bot Token Scopes rồi CÀI LẠI app vào workspace (token đổi -> cập nhật secret SLACK_BOT_TOKEN)',
+    invalid_auth: 'token sai hoặc đã bị thu hồi — tạo lại và cập nhật secret SLACK_BOT_TOKEN',
+    not_in_channel: `mời bot vào kênh: /invite @<tên bot> trong ${config.slackChannel}`,
+    channel_not_found: `SLACK_CHANNEL_ID sai, hoặc kênh riêng tư mà bot chưa được mời (${config.slackChannel})`,
+    invalid_blocks: 'Block Kit sai định dạng — chạy npm run notify:dry để xem payload',
+  };
+  const detail = [
+    data.needed ? `cần: ${data.needed}` : null,
+    data.provided ? `đang có: ${data.provided}` : null,
+    data.errors ? JSON.stringify(data.errors) : null,
+    hints[data.error] ?? null,
+  ].filter(Boolean);
+  return `Slack từ chối: ${data.error}${detail.length ? ` (${detail.join(' · ')})` : ''}`;
 }

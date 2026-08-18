@@ -86,6 +86,10 @@ npm run serve     # mở http://localhost:8080
 4. Mời bot vào kênh: gõ `/invite @<tên bot>` trong kênh đó.
 5. Lấy Channel ID: bấm tên kênh → cuối cửa sổ có ID dạng `C0123ABCD`.
 
+> Thêm scope sau khi đã cài app thì **phải cài lại** (*OAuth & Permissions →
+> Reinstall to Workspace*); token cũ giữ nguyên bộ scope cũ và trả
+> `missing_scope`. Cài lại có thể đổi token → cập nhật lại secret `SLACK_BOT_TOKEN`.
+
 ### 3. Bật thông báo tự động
 
 Trong repo: **Settings → Secrets and variables → Actions**
