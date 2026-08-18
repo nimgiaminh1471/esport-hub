@@ -97,36 +97,51 @@ export function finishedMessage(event, url) {
 export function scheduleMessage(events, { title, empty, url }) {
   if (!events.length) return { text: empty, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: empty } }] };
 
-  const lines = events.map((event) => {
+  // Mỗi trận hai tầng thay vì nhét hết vào một dòng dài:
+  //
+  //   section:  Today 3:00 PM · *DNS vs NS*      <- giờ + đội, cỡ chữ thường
+  //   context:  LCK Challengers · Week 13 · Bo3  <- chữ nhỏ, màu nhạt
+  //
+  // Nhồi một dòng thì trên điện thoại Slack tự ngắt ở giữa tên giải
+  // ("DNS vs NS · LCK / Challengers · Week 13") — chỗ ngắt rơi vào đâu là hên
+  // xui. Chủ động tách sẵn thì cả điện thoại lẫn desktop đều ngắt đúng chỗ, và
+  // context block cho luôn phân cấp thị giác: mắt lướt qua dòng đậm để tìm trận,
+  // dòng nhạt chỉ đọc khi cần.
+  const shown = events.slice(0, MAX_EVENTS);
+
+  const blocks = [{ type: 'section', text: { type: 'mrkdwn', text: `*${title}*` } }];
+
+  for (const event of shown) {
     const teams = event.teams.map((t) => t.code).join(' vs ');
     const link = url?.(event.id);
     const label = link ? `<${link}|${teams}>` : teams;
-    return `${slackDate(event.startTime, '{date_short_pretty} {time}')} · *${label}* · ${contextLine(event)}`;
-  });
+    // Trận đang đá thì chấm đỏ thay cho giờ bắt đầu — giờ đó trôi qua rồi.
+    const head =
+      event.state === 'inProgress'
+        ? `:red_circle: *${label}*`
+        : `${slackDate(event.startTime, '{date_short_pretty} {time}')} · *${label}*`;
 
-  return {
-    text: title,
-    blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: `*${title}*` } },
-      ...chunkLines(lines).map((text) => ({ type: 'section', text: { type: 'mrkdwn', text } })),
-    ],
-  };
-}
-
-/** Một section chỉ chứa được 3000 ký tự, nên phải cắt danh sách dài thành nhiều block. */
-function chunkLines(lines, limit = 2800) {
-  const chunks = [];
-  let current = '';
-  for (const line of lines) {
-    if (current.length + line.length + 1 > limit) {
-      chunks.push(current);
-      current = '';
-    }
-    current += (current ? '\n' : '') + line;
+    blocks.push(
+      { type: 'section', text: { type: 'mrkdwn', text: head } },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: contextLine(event) }] },
+    );
   }
-  if (current) chunks.push(current);
-  return chunks;
+
+  if (events.length > shown.length) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `… và ${events.length - shown.length} trận nữa` }],
+    });
+  }
+
+  return { text: title, blocks };
 }
+
+/**
+ * Mỗi trận tốn 2 block mà Slack chỉ cho 50 block một tin, nên chốt 20 trận rồi
+ * ghi "… và N trận nữa" — vẫn dưới trần (20×2 + tiêu đề + dòng thừa = 42).
+ */
+const MAX_EVENTS = 20;
 
 /** Ảnh chụp một trận: tỉ số series + chỉ số ván đang đá (nếu có). */
 export function matchMessage(match, snapshot, url) {
