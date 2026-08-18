@@ -3,10 +3,10 @@
   "game": "lol",
   "matches": {
     "116889604984222845": {
-      "state": "inProgress",
+      "state": "completed",
       "slackTs": "1787039292.894219",
       "announcedAt": "2026-08-18T07:48:12.931Z",
-      "updatedAt": "2026-08-18T08:18:36.387Z"
+      "updatedAt": "2026-08-18T11:10:25.992Z"
     },
     "116929376557102208": {
       "state": "unstarted",
@@ -15,10 +15,10 @@
       "updatedAt": "2026-08-18T08:58:45.632Z"
     },
     "116889604984222929": {
-      "state": "unstarted",
+      "state": "inProgress",
       "slackTs": "1787046128.310329",
       "announcedAt": "2026-08-18T09:42:08.364Z",
-      "updatedAt": "2026-08-18T09:42:08.364Z"
+      "updatedAt": "2026-08-18T11:10:26.086Z"
     }
   }
 }
