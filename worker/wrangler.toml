@@ -7,9 +7,12 @@ compatibility_date = "2026-08-01"
 PAGES_BASE_URL = "https://nimgiaminh1471.github.io/esport-hub"
 # ID kênh nhận tổng kết cuối ngày (bấm tên kênh -> cuối popup có Channel ID).
 SLACK_CHANNEL_ID = "C0BQT1HPY10"
-# Phần của đối tác trong lãi mỗi ngày, 0–1. Đổi ở đây là áp cho các ngày CHỐT TỪ
-# ĐÂY VỀ SAU; ngày đã chốt giữ nguyên tỉ lệ đã lưu trong chính dòng đó.
-DOI_TAC_SHARE = "0.5"
+# Phần của đối tác, 0–1. Ngày lãi và ngày lỗ dùng hai mức khác nhau — bất đối
+# xứng có chủ ý: lãi chia đôi, lỗ đối tác chỉ gánh 3/10.
+# Đổi ở đây chỉ áp cho các ngày CHỐT TỪ ĐÂY VỀ SAU; ngày đã chốt giữ nguyên tỉ lệ
+# đã lưu trong chính dòng đó.
+DOI_TAC_SHARE = "0.5"      # ngày lãi
+DOI_TAC_SHARE_LO = "0.3"   # ngày lỗ
 
 # Kho dữ liệu cho sổ ghi chú. Tạo một lần rồi dán id vào đây:
 #   npx wrangler kv namespace create NOTE

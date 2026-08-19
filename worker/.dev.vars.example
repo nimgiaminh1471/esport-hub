@@ -7,5 +7,6 @@ SLACK_SIGNING_SECRET=...
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_CHANNEL_ID=C0123ABCD
 
-# Phần của đối tác trong lãi mỗi ngày, 0–1. Mặc định 0.5.
+# Phần của đối tác, 0–1. Ngày lãi chia đôi, ngày lỗ đối tác gánh 3/10.
 DOI_TAC_SHARE=0.5
+DOI_TAC_SHARE_LO=0.3

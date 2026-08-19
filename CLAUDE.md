@@ -181,10 +181,20 @@ the Worker splits it, writes one KV row, and posts the summary to the Slack chan
 - **`minh = profit − doiTac`**, not computed independently, so the two shares always add back
   to the total exactly. The formula needs no branch for a losing day — losses split at the same
   ratio, and **a day never carries into the next one**.
-- **The ratio in force is written onto each settled row.** `DOI_TAC_SHARE` (a `[vars]` entry,
-  default 0.5) only affects days settled from then on. Reading the live ratio at display time
-  would silently restate every already-settled day — the same trap `RATE` avoids in
-  `note-core.js`.
+- **Winning and losing days split at different ratios, on purpose.** A profit is halved;
+  a loss the other party bears only 3/10 of. `DEFAULT_SHARE = { lai: 0.5, lo: 0.3 }`, overridden
+  by `DOI_TAC_SHARE` / `DOI_TAC_SHARE_LO`. The branch is on the **sign of the day's number**, not
+  on anything the typist chooses, so the same figure always splits the same way. Same spirit as
+  `RATE` in `note-core.js` (`+` earns 2, `−` costs 1) — asymmetry has to be stated outright or it
+  reads as a rounding bug.
+  Consequence worth knowing: a month that nets to zero does **not** leave both sides at zero.
+  `+10` then `−10` ends with the other party up 2 and the owner down 2. That is the arithmetic of
+  the deal, not a bug.
+- **The ratio actually applied is written onto each settled row.** Changing either `[vars]` entry
+  only affects days settled from then on. Reading the live ratio at display time would silently
+  restate every already-settled day — the same trap `RATE` avoids.
+- `splitAmount` **throws** on a non-finite ratio rather than letting it through. `NaN` writes to
+  KV happily and only shows up later as a blank cell, by which point the typed figure is gone.
 - **One KV key per day (`d:YYYY-MM-DD`)**, the whole row in `metadata`, empty value. Collapsing
   a day into one key is safe *here* — one number, written once — which is exactly the opposite
   of the per-row ledger's constraint. `list()` then reads a whole month in one call.
@@ -266,7 +276,7 @@ straight to the finished message — one lost message, never wrong data.
   on the web.
 - The Worker's secrets go in via `wrangler secret put` (or `worker/.dev.vars` locally):
   `SLACK_SIGNING_SECRET` and `SLACK_BOT_TOKEN`. `PAGES_BASE_URL`, `SLACK_CHANNEL_ID` and
-  `DOI_TAC_SHARE` are plain vars in `wrangler.toml`.
+  `DOI_TAC_SHARE` / `DOI_TAC_SHARE_LO` are plain vars in `wrangler.toml`.
 - Slack gives slash commands 3 seconds; the Worker races the work against `FAST_PATH_MS`
   (2.5s) and falls back to a deferred reply via `response_url`.
 

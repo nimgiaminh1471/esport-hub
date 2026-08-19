@@ -20,7 +20,7 @@ export const TZ = 'Asia/Ho_Chi_Minh';
 /**
  * Mọi số tiền lưu dưới dạng SỐ NGUYÊN của 1/100 đơn vị, không lưu số thực.
  *
- * Binance trả chuỗi thập phân; cộng chúng bằng số thực rồi mới làm tròn sẽ lệch
+ * Số gõ vào là chuỗi thập phân; cộng chúng bằng số thực rồi mới làm tròn sẽ lệch
  * dần theo số dòng, và sổ đối soát lệch dù chỉ một đơn vị là mất tin tưởng vào cả
  * sổ. Cộng bằng số nguyên thì phép cộng chính xác tuyệt đối.
  *
@@ -28,8 +28,16 @@ export const TZ = 'Asia/Ho_Chi_Minh';
  */
 export const SCALE = 100;
 
-/** Tỉ lệ mặc định khi chưa cấu hình gì: chia đôi. */
-export const DEFAULT_SHARE = 0.5;
+/**
+ * Tỉ lệ của đối tác, KHÁC NHAU giữa ngày lãi và ngày lỗ — bất đối xứng có chủ ý:
+ * lãi chia đôi, lỗ đối tác chỉ gánh 3/10.
+ *
+ * Chọn tỉ lệ theo DẤU của con số cuối ngày, không phải theo ý người gõ, để cùng
+ * một con số luôn ra cùng một cách chia. Cùng tinh thần với `RATE` bên
+ * `note-core.js` (`+` ăn 2, `−` trừ 1) — bất đối xứng thì phải ghi rõ ra, chứ
+ * đừng để người đọc tưởng là lỗi làm tròn.
+ */
+export const DEFAULT_SHARE = { lai: 0.5, lo: 0.3 };
 
 /* ---------------------------------------------------------------- mốc ngày */
 
@@ -115,14 +123,30 @@ export function parseAmount(raw) {
 }
 
 /**
- * Chia lãi của một ngày theo tỉ lệ.
+ * Chia lãi của một ngày.
+ *
+ * Ngày lãi và ngày lỗ dùng hai tỉ lệ khác nhau (xem `DEFAULT_SHARE`); chọn theo
+ * dấu của chính con số đó. Ngày bằng 0 rơi vào nhánh lãi, mà 0 nhân gì cũng là 0
+ * nên không có gì để phân vân.
+ *
+ * Tỉ lệ ĐÃ DÙNG được trả ra để chỗ gọi lưu vào dòng. Không lưu thì mỗi lần đổi
+ * cấu hình là mọi ngày cũ tự tính lại theo mức mới, không còn đối chiếu được với
+ * lần chia trước — đúng cái bẫy `RATE` bên `note-core.js` đã né.
  *
  * `minh` lấy phần dư (`profit - doiTac`) chứ không tính riêng, nhờ vậy
  * `doiTac + minh === profit` đúng tuyệt đối, không bao giờ lệch một đơn vị ở dòng
- * tổng. Công thức tự chạy đúng cho ngày âm nên không cần nhánh riêng — đúng với
- * quy ước "chia cả lỗ".
+ * tổng — kể cả khi làm tròn số lẻ và kể cả với số âm.
  */
-export function splitAmount(profitUnits, ratio = DEFAULT_SHARE) {
+export function splitAmount(profitUnits, share = DEFAULT_SHARE) {
+  const ratio = profitUnits < 0 ? share?.lo : share?.lai;
+
+  // Chặn ở đây chứ không để lọt: tỉ lệ hỏng sẽ cho ra `NaN`, mà `NaN` ghi được
+  // vào KV bình thường và chỉ hiện ra ở trang xem dưới dạng một dòng trống. Lúc
+  // đó con số gốc đã mất, không dựng lại được.
+  if (!Number.isFinite(ratio)) {
+    throw new Error(`Tỉ lệ chia không hợp lệ: ${JSON.stringify(share)}`);
+  }
+
   const doiTacUnits = Math.round(profitUnits * ratio);
   return { profitUnits, doiTacUnits, minhUnits: profitUnits - doiTacUnits, ratio };
 }
@@ -155,9 +179,16 @@ export function summariseDays(rows) {
  */
 export function dayLines(row) {
   const pad = (u) => fmt(u).padStart(10);
+  const lo = row.profitUnits < 0;
+
+  // Nói rõ "gánh" ở ngày lỗ: cùng một con số phần trăm nhưng chiều ngược nhau,
+  // mà hai ngày cạnh nhau hiện 50% rồi 30% thì rất dễ tưởng có gì đó sai.
+  const ratio = row.ratio ?? (lo ? DEFAULT_SHARE.lo : DEFAULT_SHARE.lai);
+  const meta = `(${lo ? 'gánh ' : ''}${Math.round(ratio * 100)}%)`;
+
   return [
-    `Lãi ngày : ${pad(row.profitUnits)}`,
-    `Đối tác  : ${pad(row.doiTacUnits)}   (${Math.round((row.ratio ?? DEFAULT_SHARE) * 100)}%)`,
+    `${lo ? 'Lỗ ngày  ' : 'Lãi ngày '}: ${pad(row.profitUnits)}`,
+    `Đối tác  : ${pad(row.doiTacUnits)}   ${meta}`,
     '────────────────────────',
     `Còn lại  : ${pad(row.minhUnits)}`,
   ];
@@ -232,12 +263,19 @@ export function correctionMessage(row, truocDo) {
  * lúc đối chiếu mới biết.
  */
 export function shareFrom(env) {
-  const raw = env?.DOI_TAC_SHARE;
-  if (raw === undefined || raw === null || raw === '') return DEFAULT_SHARE;
+  const one = (name, fallback) => {
+    const raw = env?.[name];
+    if (raw === undefined || raw === null || raw === '') return fallback;
 
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > 1) {
-    throw new Error(`DOI_TAC_SHARE phải là số trong khoảng 0–1, đang là \`${raw}\`.`);
-  }
-  return n;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > 1) {
+      throw new Error(`${name} phải là số trong khoảng 0–1, đang là \`${raw}\`.`);
+    }
+    return n;
+  };
+
+  return {
+    lai: one('DOI_TAC_SHARE', DEFAULT_SHARE.lai),
+    lo: one('DOI_TAC_SHARE_LO', DEFAULT_SHARE.lo),
+  };
 }
