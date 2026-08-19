@@ -123,8 +123,8 @@ function renderDays({ ngay }) {
       el('a', { class: 'game-tab', href: hrefFor('month', shiftMonth(month, -1)), text: '‹ tháng trước' }),
       el('a', { class: 'game-tab', href: hrefFor('month', shiftMonth(month, 1)), text: 'tháng sau ›' }),
     ]),
-    line('Lãi', fmt(total.profitUnits), `${total.days} ngày · ${total.count} vị thế`),
-    line('Đối tác', fmt(total.doiTacUnits), `${total.wins} thắng · ${total.losses} thua`),
+    line('Lãi', fmt(total.profitUnits), `${total.days} ngày · ${total.lai} lãi, ${total.lo} lỗ`),
+    line('Đối tác', fmt(total.doiTacUnits), ''),
     line('Còn lại', fmt(total.minhUnits), '', true),
     days.length
       ? el('div', { class: 'scroll-x' }, [
@@ -132,6 +132,7 @@ function renderDays({ ngay }) {
             el('thead', {}, [
               el('tr', {}, [
                 el('th', { text: 'Ngày' }),
+                el('th', { text: 'Ghi chú' }),
                 el('th', { class: 'num', text: 'Lãi' }),
                 el('th', { class: 'num', text: 'Đối tác' }),
                 el('th', { class: 'num', text: 'Còn lại' }),
@@ -143,6 +144,11 @@ function renderDays({ ngay }) {
               days.map((d) =>
                 el('tr', {}, [
                   el('td', { text: dayLabel(d.day) }),
+                  el('td', {
+                    text: [d.note, d.suaTu !== undefined ? `sửa từ ${fmt(d.suaTu)}` : null]
+                      .filter(Boolean)
+                      .join(' · '),
+                  }),
                   el('td', { class: 'num', text: fmt(d.profitUnits) }),
                   el('td', { class: 'num', text: fmt(d.doiTacUnits) }),
                   el('td', { class: 'num', text: fmt(d.minhUnits) }),
@@ -159,7 +165,7 @@ function renderDays({ ngay }) {
 function renderSummary({ range, summary, prev, next }) {
   clear(dom.sum).append(
     el('header', {}, [
-      el('h2', { text: `Nhập tay · kỳ ${range.label}` }),
+      el('h2', { text: `Theo trận · kỳ ${range.label}` }),
       el('span', { class: 'spacer' }),
       el('a', { class: 'game-tab', href: hrefFor('period', prev), text: '‹ kỳ trước' }),
       el('a', { class: 'game-tab', href: hrefFor('period', next), text: 'kỳ sau ›' }),
@@ -173,7 +179,7 @@ function renderSummary({ range, summary, prev, next }) {
 
 function renderRows({ entries }) {
   clear(dom.rows).append(
-    el('header', {}, [el('h2', { text: 'Chi tiết nhập tay' })]),
+    el('header', {}, [el('h2', { text: 'Chi tiết theo trận' })]),
     entries.length
       ? el('div', { class: 'scroll-x' }, [
           el('table', {}, [

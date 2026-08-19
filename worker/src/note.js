@@ -15,8 +15,17 @@
  * metadata nên đọc cả kỳ chỉ tốn MỘT lời gọi KV, thay vì list rồi get từng cái.
  */
 import { providers } from '../../docs/assets/games.js';
-import { computeDay, getDay, getDayPositions, listDays, settleDay } from './day.js';
-import { dayLabel, dayLines, dayMessage, fmt, shiftDay, summariseDays, today } from './day-core.js';
+import { getDay, listDays, removeDay, settleDay } from './day.js';
+import {
+  correctionMessage,
+  dayLabel,
+  dayLines,
+  dayMessage,
+  fmt,
+  parseAmount,
+  summariseDays,
+  today,
+} from './day-core.js';
 import { postToChannel } from './slack-post.js';
 import {
   currentPeriod,
@@ -118,15 +127,18 @@ function reportText(period, entries) {
 const HELP = [
   '*Sổ ghi chú* — chỉ mình bạn thấy các trả lời này.',
   '',
-  '*Theo ngày* — lãi lấy thẳng từ Binance, tự chốt 00:05 mỗi ngày.',
+  '*Theo ngày* — cuối ngày gõ tổng lãi, sổ tự chia và đăng lên kênh.',
   '```',
-  '/note today                   lãi đã chốt hôm nay tới lúc này',
-  '/note day [YYYY-MM-DD]        xem một ngày đã chốt (mặc định hôm qua)',
+  '/note chot 12.5               chốt hôm nay, lãi 12.5',
+  '/note chot -8 gãy kèo cuối    kèm ghi chú',
+  '/note chot 2026-08-18 12.5    chốt bù một ngày cũ',
+  '/note chot 2026-08-18 9 --sua sửa lại ngày đã chốt',
+  '/note day [YYYY-MM-DD]        xem một ngày (mặc định hôm nay)',
   '/note days [YYYY-MM]          các ngày trong tháng + tổng',
-  '/note settle [YYYY-MM-DD]     chốt tay, khi cron lỡ nhịp',
+  '/note xoa <YYYY-MM-DD>        xoá hẳn một ngày chốt nhầm',
   '```',
   '',
-  '*Nhập tay* — sổ cũ, giữ lại để tra lịch sử.',
+  '*Theo trận* — sổ cũ, mỗi trận một dòng, giữ lại để tra lịch sử.',
   '```',
   '/note add <mã> +              chung +2',
   '/note add <mã> -              chung −1',
@@ -138,17 +150,39 @@ const HELP = [
   '/note undo                    xoá dòng vừa nhập',
   '```',
   'Mã trận lấy ở dòng nhạt trong `/lol schedule` hoặc `/val schedule`.',
-  'Kỳ của sổ nhập tay chạy từ 26 tháng trước tới hết 25 tháng này.',
+  'Kỳ của sổ theo trận chạy từ 26 tháng trước tới hết 25 tháng này.',
 ].join('\n');
 
-/** Khối tổng kết một ngày, dùng lại cho `today` / `day` / `settle`. */
+/** Khối tổng kết một ngày, dùng lại cho `chot` và `day`. */
 const dayReport = (title, row) => `*${title}*\n\`\`\`\n${dayLines(row).join('\n')}\n\`\`\``;
 
-/** Một vị thế trong `/note day` — tiêu đề kèo, phần đã chọn, lãi. */
-const positionLine = (p) =>
-  [p.marketTitle, p.outcomeName, fmt(Math.round(Number(p.realizedPnl ?? p.pnl ?? 0) * 100))]
-    .filter(Boolean)
-    .join(' · ');
+const IS_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Đọc lệnh `chot`: `[ngày] <số> [--sua] [ghi chú…]`.
+ *
+ * Ngày và cờ nhận ở BẤT KỲ đâu trong câu, phần còn lại là ghi chú. Bắt buộc đúng
+ * thứ tự thì mỗi lần gõ vội lại phải sửa, mà lệnh này gõ mỗi ngày một lần lúc
+ * đang mệt.
+ *
+ * Con số nhận diện bằng vị trí đầu tiên còn lại chứ không bằng dấu: `-8` là một
+ * ngày lỗ, không phải một cờ.
+ */
+function parseChot(tokens) {
+  const rest = [...tokens];
+
+  const si = rest.findIndex((t) => ['--sua', '--sửa', '--force'].includes(t.toLowerCase()));
+  const force = si !== -1;
+  if (force) rest.splice(si, 1);
+
+  const di = rest.findIndex((t) => IS_DAY.test(t));
+  const day = di === -1 ? null : rest.splice(di, 1)[0];
+
+  const amount = rest.shift();
+  const note = rest.join(' ').trim() || null;
+
+  return { day, amount, force, note };
+}
 
 /**
  * @param {string[]} args  đã tách khoảng trắng, đã bỏ tên lệnh
@@ -163,28 +197,52 @@ export async function handleNote(args, env) {
   switch (sub) {
     /* ------------------------------------------------------------ theo ngày */
 
-    case 'today':
-    case 'hom-nay':
-    case 'hôm': {
-      // Ngày chưa hết nên KHÔNG ghi gì vào KV — chốt sớm một ngày còn đang chạy
-      // thì phần lãi sau đó vĩnh viễn không vào sổ.
-      const row = await computeDay(env, today());
-      return replyBlocks(dayReport(`Hôm nay ${dayLabel(row.day)} · tạm tính`, row), [
-        `${row.count} vị thế đã tất toán · sổ chốt lúc 00:05 đêm nay`,
+    case 'chot':
+    case 'chốt':
+    case 'settle': {
+      const { day: raw, amount, force, note } = parseChot(rest);
+      const day = raw || today();
+      const profitUnits = parseAmount(amount);
+
+      const { row, truocDo } = await settleDay(env, day, profitUnits, { force, note });
+
+      // Đăng kênh để đối tác thấy cùng lúc — đó là điểm của việc chốt hằng ngày.
+      // Sửa đè thì đăng tin SỬA kèm số cũ, không đăng lại như thể vừa chốt mới:
+      // kênh đã nhận con số cũ rồi, thay im lặng thì tổng tháng đổi mà không có gì
+      // giải thích.
+      let posted = true;
+      try {
+        await postToChannel(env, truocDo ? correctionMessage(row, truocDo) : dayMessage(row));
+      } catch (err) {
+        posted = false;
+        console.error(`Chốt xong ngày ${day} nhưng không gửi được Slack: ${err.message}`);
+      }
+
+      return replyBlocks(dayReport(`Ngày ${dayLabel(day)}`, row), [
+        [
+          truocDo ? `Đã sửa từ ${fmt(truocDo.profitUnits)}.` : 'Đã ghi vào sổ.',
+          posted ? 'Đã đăng lên kênh.' : 'Chưa đăng được lên kênh — xem log Worker.',
+        ].join(' '),
       ]);
     }
 
     case 'day':
     case 'ngay':
     case 'ngày': {
-      const day = rest[0] || shiftDay(today(), -1);
+      const day = rest[0] || today();
       const row = await getDay(env, day);
       if (!row) {
-        return reply(`Ngày ${day} chưa chốt. Gõ \`/note settle ${day}\` để chốt ngay.`);
+        return reply(`Ngày ${day} chưa chốt. Gõ \`/note chot ${day} <số>\` để ghi.`);
       }
 
-      const positions = await getDayPositions(env, day);
-      return replyBlocks(dayReport(`Ngày ${dayLabel(day)}`, row), positions.map(positionLine));
+      return replyBlocks(dayReport(`Ngày ${dayLabel(day)}`, row), [
+        [
+          row.note,
+          row.suaTu !== undefined ? `đã sửa từ ${fmt(row.suaTu)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      ].filter(Boolean));
     }
 
     case 'days':
@@ -197,7 +255,7 @@ export async function handleNote(args, env) {
       const t = summariseDays(rows);
       return replyBlocks(
         [
-          `*Tháng ${month}* · ${t.days} ngày`,
+          `*Tháng ${month}* · ${t.days} ngày · ${t.lai} lãi, ${t.lo} lỗ`,
           '```',
           `Lãi      : ${fmt(t.profitUnits).padStart(10)}`,
           `Đối tác  : ${fmt(t.doiTacUnits).padStart(10)}`,
@@ -209,29 +267,18 @@ export async function handleNote(args, env) {
       );
     }
 
-    case 'settle':
-    case 'chot':
-    case 'chốt': {
-      const day = rest[0] || shiftDay(today(), -1);
-      const { row, created } = await settleDay(env, day);
-
-      // Chốt tay cũng đăng kênh y như cron: lệnh này dùng khi cron lỡ nhịp, mà
-      // lỡ nhịp thì đối tác cũng chưa thấy tổng kết ngày đó.
-      let posted = created;
-      if (created) {
-        try {
-          await postToChannel(env, dayMessage(row));
-        } catch (err) {
-          posted = false;
-          console.error(`Chốt xong ngày ${day} nhưng không gửi được Slack: ${err.message}`);
-        }
+    case 'xoa':
+    case 'xoá': {
+      const day = rest[0];
+      if (!IS_DAY.test(day ?? '')) {
+        return reply('Cần ngày dạng `YYYY-MM-DD`. Ví dụ: `/note xoa 2026-08-18`.');
       }
 
-      return replyBlocks(dayReport(`Ngày ${dayLabel(day)}`, row), [
-        created
-          ? `Đã chốt và ghi vào sổ.${posted ? ' Đã đăng lên kênh.' : ' Chưa đăng được lên kênh — xem log Worker.'}`
-          : 'Ngày này đã chốt từ trước, số giữ nguyên.',
-      ]);
+      // Xoá không đăng kênh: dùng khi chốt NHẦM NGÀY, và tin đính chính đúng sẽ là
+      // tin `chot` của ngày đúng ngay sau đó.
+      const removed = await removeDay(env, day);
+      if (!removed) return reply(`Ngày ${day} vốn chưa có trong sổ.`);
+      return reply(`Đã xoá ngày ${dayLabel(day)} (${fmt(removed.profitUnits)}) khỏi sổ.`);
     }
 
     /* ----------------------------------------------------------- nhập tay */

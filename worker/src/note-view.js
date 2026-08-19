@@ -97,6 +97,7 @@ function dayRows(days) {
     .map(
       (d) => `<tr>
         <td>${esc(dayLabel(d.day))}</td>
+        <td>${esc([d.note, d.suaTu !== undefined ? `sửa từ ${fmt(d.suaTu)}` : null].filter(Boolean).join(' · '))}</td>
         <td class="n">${esc(fmt(d.profitUnits))}</td>
         <td class="n">${esc(fmt(d.doiTacUnits))}</td>
         <td class="n">${esc(fmt(d.minhUnits))}</td>
@@ -105,7 +106,7 @@ function dayRows(days) {
     .join('');
 
   return `<div class="scroll"><table>
-    <thead><tr><th>Ngày</th><th class="n">Lãi</th><th class="n">Đối tác</th><th class="n">Còn lại</th></tr></thead>
+    <thead><tr><th>Ngày</th><th>Ghi chú</th><th class="n">Lãi</th><th class="n">Đối tác</th><th class="n">Còn lại</th></tr></thead>
     <tbody>${body}</tbody>
   </table></div>`;
 }
@@ -131,15 +132,15 @@ export function renderNotePage(snapshot) {
     <a href="?month=${esc(shiftPeriod(ngay.month, -1))}">‹ tháng trước</a>
     <a href="?month=${esc(shiftPeriod(ngay.month, 1))}">tháng sau ›</a>
   </header>
-  ${summaryRow('Lãi', fmt(ngay.total.profitUnits), `${ngay.total.days} ngày · ${ngay.total.count} vị thế`)}
-  ${summaryRow('Đối tác', fmt(ngay.total.doiTacUnits), `${ngay.total.wins} thắng · ${ngay.total.losses} thua`)}
+  ${summaryRow('Lãi', fmt(ngay.total.profitUnits), `${ngay.total.days} ngày · ${ngay.total.lai} lãi, ${ngay.total.lo} lỗ`)}
+  ${summaryRow('Đối tác', fmt(ngay.total.doiTacUnits), '')}
   ${summaryRow('Còn lại', fmt(ngay.total.minhUnits), '', true)}
   ${dayRows(ngay.days)}
 </section>
 
 <section class="card">
   <header>
-    <h2>Nhập tay · kỳ ${esc(range.label)}</h2>
+    <h2>Theo trận · kỳ ${esc(range.label)}</h2>
     <span class="spacer"></span>
     <a href="?period=${esc(prev)}">‹ kỳ trước</a>
     <a href="?period=${esc(next)}">kỳ sau ›</a>
@@ -150,7 +151,7 @@ export function renderNotePage(snapshot) {
 </section>
 
 <section class="card">
-  <header><h2>Chi tiết nhập tay</h2></header>
+  <header><h2>Chi tiết theo trận</h2></header>
   ${detailRows(entries)}
 </section>
 

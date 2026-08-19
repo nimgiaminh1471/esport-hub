@@ -17,12 +17,7 @@ node src/providers/valorant.js --match <matchId> # series + map list (no stats e
 # /note is Slack-only; stub KV with a Map to exercise it from Node (see worker/src/note.js)
 GAME=val npm run notify:dry                      # only Valorant
 
-npm run pnl                  # Binance Prediction: yesterday's settled PnL + the split
-npm run pnl -- 2026-08-18    # a specific day
-npm run pnl -- --today       # the running day, provisional
-
 cd worker && npx wrangler dev      # slash command locally (needs worker/.dev.vars)
-cd worker && npx wrangler dev --test-scheduled   # then curl "localhost:8787/__scheduled?cron=5+17+*+*+*"
 cd worker && npx wrangler deploy
 ```
 
@@ -41,7 +36,7 @@ Three surfaces, none of which needs a long-running server:
 | Surface | Runs on | Job |
 |---|---|---|
 | `src/notify.js` | GitHub Actions cron, every 5 min | announce upcoming / started / finished, for every registered game |
-| `worker/src/index.js` | Cloudflare Workers | `/lol` and `/val` — `schedule`, `live`, `match <id>`; plus `/note` and its 00:05 daily-settlement cron |
+| `worker/src/index.js` | Cloudflare Workers | `/lol` and `/val` — `schedule`, `live`, `match <id>`; plus `/note` |
 | `docs/` | GitHub Pages | schedule + live in-game stats (LoL only), polls every 10s |
 
 ### `docs/assets/` is the single source of truth
@@ -123,9 +118,9 @@ League filtering lives in `docs/assets/leagues.js` — see below.
 
 A private running tally, unrelated to the esports features. Stored in a **Cloudflare KV
 namespace** (`env.NOTE`) and viewable two ways. Two halves that share only the storage and the
-views: the **manual ledger** below (entered with `/note add`, period 26→25) and the **daily
-settlement** further down (filled automatically from Binance). Keys are `e:` and `d:`
-respectively, so neither listing sees the other's rows.
+views: the **per-match ledger** below (entered with `/note add`, period 26→25) and the **daily
+settlement** further down (one typed total a day, split with the other party). Keys are `e:`
+and `d:` respectively, so neither listing sees the other's rows.
 
 - **Data lives in KV, not in this repo** — that is the whole point. `worker/src/note.js` is the
   only file that touches it; `docs/assets/note-core.js` holds the pure maths so it is testable
@@ -165,26 +160,24 @@ respectively, so neither listing sees the other's rows.
   `doiTac` / "đối tác" in code, Slack and UI, never a real name, even though that message goes
   to a shared channel.
 
-### Daily settlement — profit read from Binance, split, posted
+### Daily settlement — one number a day, split, posted
 
-A second, automatic half of `/note`: every day at 00:05 Asia/Ho_Chi_Minh a Worker cron reads
-the day's realized profit from Binance Prediction Markets, splits it, writes one KV row, and
-posts the summary to the Slack channel. `/note today | day | days | settle` read the same data.
+The other half of `/note`: at the end of each day the owner types the day's total profit,
+the Worker splits it, writes one KV row, and posts the summary to the Slack channel.
+`/note chot | day | days | xoa` are the whole surface.
 
-- **`docs/assets/` rules apply to `worker/src/binance.js` and `day-core.js` even though they
-  live in `worker/`.** Both are plain ESM on globals present in Node 22 *and* Workers (`fetch`,
-  `crypto.subtle`) — that is what lets `src/pnl.js` exercise the real transport from Node
-  without wrangler. Do not add `node:*` to either.
-- **`position/settled-history`, never `pnl/portfolio`, is the source.** `portfolio` folds in
-  `unrealizedPnl` of open positions, which moves with the market — settle a day with it and the
-  same day shows two different numbers on two viewings.
-- **The day boundary is decided here, from `settledDate` (epoch ms), not by Binance's
-  `startDate`/`endDate`.** Those two are undocumented as to timezone. They are still sent, but
-  only to narrow what is downloaded; the range is then widened by a day on each side and
-  filtered locally. Same reasoning as client-side league filtering.
+- **The number is typed, not fetched — and that is a decision, not a shortcut.** Binance does
+  expose the Prediction Markets PnL (`/sapi/v1/w3w/wallet/prediction/position/settled-history`),
+  and this was built against it first. It was dropped because reading it needs a key with
+  *Prediction Trading* permission, which Binance expires after 90 days unless the key is pinned
+  to an IP allowlist — and Workers have no fixed egress IP to pin. A ledger that silently stops
+  every 90 days is worse than one that needs a daily message. Git history has the working
+  transport (`worker/src/binance.js`, `src/pnl.js`) if a static egress IP ever exists.
 - **Money is stored as integers of 1/100** (`SCALE` in `day-core.js`), never as floats. Fields
-  carry the `Units` suffix for that reason. Summing decimal strings as floats drifts with row
-  count, and a reconciliation ledger that is off by one is worthless.
+  carry the `Units` suffix for that reason. `parseAmount` accepts `12,5` as well as `12.5` — a
+  Vietnamese keyboard gives the comma, and `Number('12,5')` is `NaN`, which would land as a
+  0.00 day indistinguishable from breaking even. It also rejects absurd magnitudes, because a
+  typed ledger's likeliest error is one digit too many.
 - **`minh = profit − doiTac`**, not computed independently, so the two shares always add back
   to the total exactly. The formula needs no branch for a losing day — losses split at the same
   ratio, and **a day never carries into the next one**.
@@ -192,35 +185,22 @@ posts the summary to the Slack channel. `/note today | day | days | settle` read
   default 0.5) only affects days settled from then on. Reading the live ratio at display time
   would silently restate every already-settled day — the same trap `RATE` avoids in
   `note-core.js`.
-- **One KV key per day (`d:YYYY-MM-DD`)**, summary in `metadata`, position list in the value.
-  Collapsing a period into one key is safe *here* — only the cron writes, once a day — which is
-  exactly the opposite of the manual ledger's constraint. `list()` then reads a whole month's
-  summaries in one call.
-- **A day already settled is never overwritten** (`settleDay` returns early). Cloudflare may
-  re-fire a cron, and overwriting means posting to the channel twice.
-- **Each cron run walks back 7 days and settles whatever is missing**, rather than settling
-  "yesterday". Cron misses happen; settling only yesterday leaves a permanent hole with no
-  error. Same principle as `state/announced.json`.
-- KV is written **before** Slack is posted. A failed post costs one message (`/note day` still
-  shows it); posting first and failing to write means posting that day again tomorrow.
-- **A failed settle posts a warning to the channel** (`alertMessage`), not just `console.error`.
-  An expired key or revoked SAS leaves the cron running fine and simply posting nothing — which
-  is indistinguishable from a day with no bets, and can go unnoticed for weeks. One aggregated
-  message per run, not one per day. It repeats nightly on purpose (an alert that mutes itself
-  is an alert you miss) and self-limits, because a failing day ages out of the 7-day window.
-  The channel copy stays neutral — no exchange name, no error code; the verbatim error is in
-  `wrangler tail`.
-- **Binance expires the trading permission after 90 days on a key with no IP allowlist**, and
-  Workers have no fixed egress IP to allowlist. So the permission must be re-enabled roughly
-  every 85 days; the warning above is what surfaces it when it lapses.
+- **One KV key per day (`d:YYYY-MM-DD`)**, the whole row in `metadata`, empty value. Collapsing
+  a day into one key is safe *here* — one number, written once — which is exactly the opposite
+  of the per-row ledger's constraint. `list()` then reads a whole month in one call.
+- **Re-typing a settled day is refused; `--sua` overwrites and posts a *correction* message
+  naming the old number.** The channel already received the first figure and the other party
+  may have acted on it, so a silent swap leaves the month's total changed with nothing to
+  explain it. The overwritten value is also kept on the row as `suaTu`.
+- `/note xoa` deletes a day outright and deliberately posts nothing: it is for settling the
+  *wrong date*, where the correcting announcement is the `chot` of the right date right after.
+- **There is no cron.** Nothing can be computed without the typed number, so a scheduled job
+  would have nothing to do; a nagging reminder was considered and declined. A forgotten day
+  stays empty until `/note chot <date> <number>` fills it, which works for any past date.
 - Slack Block Kit for this lives in `day-core.js`, not `src/lib/blocks.js` — that file is the
   esports Block Kit and imports the game registry, which `/note` deliberately stays clear of.
   `worker/src/slack-post.js` exists because `src/slack.js` pulls in `src/lib/config.js`
   (`node:url`), which the Worker cannot bundle.
-- **Binance needs four things done in the app before any of this returns data**: KYC, a
-  Prediction Account, Prediction SAS authorization, and *Prediction Trading* permission on the
-  API key. `signedGet` rethrows Binance's `code`/`msg` verbatim because cron logs are the only
-  place a failure shows up — and an empty array cannot be told apart from "no bets today".
 
 ### Dedup is state-based, not time-based
 
@@ -285,10 +265,8 @@ straight to the finished message — one lost message, never wrong data.
 - Escape hatches: `all` token on the slash command (`/lol schedule 24 all`), `?leagues=all`
   on the web.
 - The Worker's secrets go in via `wrangler secret put` (or `worker/.dev.vars` locally):
-  `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN`, `BINANCE_API_KEY`, `BINANCE_API_SECRET`.
-  `PAGES_BASE_URL`, `SLACK_CHANNEL_ID` and `DOI_TAC_SHARE` are plain vars in `wrangler.toml`.
-  `npm run pnl` reads `worker/.dev.vars` rather than `.env` — the Binance keys belong to the
-  Worker, and duplicating them into a second file is one more place to leak them from.
+  `SLACK_SIGNING_SECRET` and `SLACK_BOT_TOKEN`. `PAGES_BASE_URL`, `SLACK_CHANNEL_ID` and
+  `DOI_TAC_SHARE` are plain vars in `wrangler.toml`.
 - Slack gives slash commands 3 seconds; the Worker races the work against `FAST_PATH_MS`
   (2.5s) and falls back to a deferred reply via `response_url`.
 

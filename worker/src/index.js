@@ -18,9 +18,7 @@ import { makeLeagueFilter, filterByLeague, hasLeagueFilter } from '../../docs/as
 import { scheduleMessage, matchMessage } from '../../src/lib/blocks.js';
 import { handleNote, noteSnapshot } from './note.js';
 import { renderNotePage } from './note-view.js';
-import { daySnapshot, settleBacklog, today } from './day.js';
-import { alertMessage, dayMessage } from './day-core.js';
-import { postToChannel } from './slack-post.js';
+import { daySnapshot } from './day.js';
 
 /** Slack huỷ kết nối sau 3s; chốt 2,5s rồi chuyển sang trả lời trễ qua response_url. */
 const FAST_PATH_MS = 2500;
@@ -97,59 +95,7 @@ export default {
     );
     return json({ response_type: 'ephemeral', text: ':hourglass: Đang tra cứu…' });
   },
-
-  /**
-   * Cron 00:05 giờ VN — chốt sổ cho ngày VỪA kết thúc rồi đăng tổng kết vào kênh.
-   *
-   * Rà ngược vài ngày chứ không chỉ chốt hôm qua: cron lỡ nhịp là chuyện thường,
-   * và chỉ chốt hôm qua thì ngày bị bỏ sẽ trống vĩnh viễn mà không báo gì. Xem
-   * `settleBacklog`.
-   *
-   * Đăng SAU khi đã ghi KV xong: ghi trước thì cùng lắm là mất tin Slack của một
-   * ngày (chạy `/note day` là xem lại được); đăng trước mà ghi hỏng thì lần cron
-   * sau lại đăng đúng ngày đó lần nữa.
-   */
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(runDailySettlement(env));
-  },
 };
-
-async function runDailySettlement(env) {
-  if (!env?.NOTE) {
-    console.error('Chưa gắn kho dữ liệu NOTE — bỏ qua lượt chốt sổ.');
-    return;
-  }
-
-  const { created, errors } = await settleBacklog(env);
-
-  for (const { day, message } of errors) {
-    console.error(`Không chốt được ngày ${day}: ${message}`);
-  }
-
-  for (const row of created) {
-    try {
-      await postToChannel(env, dayMessage(row));
-    } catch (err) {
-      // Ngày đã ghi vào KV rồi; gửi hỏng thì chỉ mất tin, số liệu vẫn còn.
-      console.error(`Chốt xong ngày ${row.day} nhưng không gửi được Slack: ${err.message}`);
-    }
-  }
-
-  // Báo lên kênh chứ không chỉ ghi log: khoá Binance hết hạn hay SAS bị thu hồi
-  // thì cron vẫn chạy trơn tru, chỉ là không đăng gì — trông y hệt một ngày không
-  // có kèo nào. Im lặng là kiểu hỏng duy nhất ở đây có thể kéo dài hàng tuần.
-  if (errors.length) {
-    try {
-      await postToChannel(env, alertMessage(errors));
-    } catch (err) {
-      console.error(`Không gửi được cảnh báo lên Slack: ${err.message}`);
-    }
-  }
-
-  if (!created.length && !errors.length) {
-    console.log(`Không có ngày nào cần chốt (hôm nay ${today()}).`);
-  }
-}
 
 /* ------------------------------------------------------------------ định tuyến */
 

@@ -80,12 +80,6 @@ export function dayLabel(day) {
 
 /* ------------------------------------------------------------------ số má */
 
-/** Chuỗi thập phân của Binance -> số nguyên 1/100, làm tròn đúng một lần. */
-export const toUnits = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.round(n * SCALE) : 0;
-};
-
 /** Số nguyên 1/100 -> chuỗi hiển thị, luôn kèm dấu để đọc lướt biết ngay chiều. */
 export function fmt(units) {
   const n = (units ?? 0) / SCALE;
@@ -93,45 +87,44 @@ export function fmt(units) {
 }
 
 /**
- * Cộng và chia lãi của một ngày.
+ * Đọc con số người dùng gõ -> số nguyên 1/100.
  *
- * Cộng ở độ chính xác cao hơn hiển thị rồi mới làm tròn MỘT LẦN cho cả ngày —
- * làm tròn từng vị thế trước khi cộng thì sai số nhân theo số vị thế.
+ * Nhận cả `12.5` lẫn `12,5`: bàn phím tiếng Việt cho dấu phẩy, và gõ nhầm dấu là
+ * chuyện xảy ra hàng ngày. `Number('12,5')` ra `NaN`, mà `NaN` lọt xuống dưới sẽ
+ * thành một ngày 0.00 trông y như ngày hoà vốn.
  *
- * `minh` lấy phần dư của phép làm tròn (`profit - doiTac`) chứ không tính riêng,
- * nhờ vậy `doiTac + minh === profit` đúng tuyệt đối, không bao giờ lệch một đơn vị
- * ở dòng tổng. Công thức này tự chạy đúng cho ngày âm nên không cần nhánh riêng —
- * đúng với quy ước "chia cả lỗ".
+ * Chặn số vô lý ngay tại đây: nhập tay thì gõ thừa một chữ số là chuyện thường,
+ * và sổ đối soát nhận nhầm một con số to gấp mười thì tới lúc thanh toán mới cãi
+ * nhau. Ngưỡng đặt rộng rãi, chỉ để bắt lỗi gõ chứ không phải để giới hạn.
  */
-export function splitDay(positions, ratio = DEFAULT_SHARE) {
-  let micro = 0;
-  let wins = 0;
-  let losses = 0;
+export const MAX_UNITS = 100_000_000; // 1 triệu đơn vị hiển thị
 
-  for (const p of positions) {
-    // `realizedPnl` là trường chuẩn; `pnl` là tên Binance dùng ở vài chỗ trong
-    // cùng schema. Đọc cả hai để một lần đổi tên phía họ không làm ngày đó về 0.
-    const raw = p.realizedPnl ?? p.pnl;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) continue;
-
-    micro += Math.round(n * 1_000_000);
-    if (n > 0) wins++;
-    else if (n < 0) losses++;
+export function parseAmount(raw) {
+  if (raw === undefined || raw === null || raw === '') {
+    throw new Error('Cần một con số. Ví dụ: `/note chot 12.5` hoặc `/note chot -8`.');
   }
 
-  const profitUnits = Math.round(micro / (1_000_000 / SCALE));
-  const doiTacUnits = Math.round(profitUnits * ratio);
+  const n = Number(String(raw).replace(',', '.'));
+  if (!Number.isFinite(n)) throw new Error(`\`${raw}\` không phải là số.`);
 
-  return {
-    profitUnits,
-    doiTacUnits,
-    minhUnits: profitUnits - doiTacUnits,
-    ratio,
-    count: positions.length,
-    wins,
-    losses,
-  };
+  const units = Math.round(n * SCALE);
+  if (Math.abs(units) > MAX_UNITS) {
+    throw new Error(`\`${raw}\` lớn bất thường — kiểm tra lại xem có gõ thừa chữ số không.`);
+  }
+  return units;
+}
+
+/**
+ * Chia lãi của một ngày theo tỉ lệ.
+ *
+ * `minh` lấy phần dư (`profit - doiTac`) chứ không tính riêng, nhờ vậy
+ * `doiTac + minh === profit` đúng tuyệt đối, không bao giờ lệch một đơn vị ở dòng
+ * tổng. Công thức tự chạy đúng cho ngày âm nên không cần nhánh riêng — đúng với
+ * quy ước "chia cả lỗ".
+ */
+export function splitAmount(profitUnits, ratio = DEFAULT_SHARE) {
+  const doiTacUnits = Math.round(profitUnits * ratio);
+  return { profitUnits, doiTacUnits, minhUnits: profitUnits - doiTacUnits, ratio };
 }
 
 /**
@@ -141,14 +134,13 @@ export function splitDay(positions, ratio = DEFAULT_SHARE) {
  * thể đã đổi giữa chừng, và ngày đã chốt thì không được tính lại.
  */
 export function summariseDays(rows) {
-  const s = { profitUnits: 0, doiTacUnits: 0, minhUnits: 0, days: rows.length, wins: 0, losses: 0, count: 0 };
+  const s = { profitUnits: 0, doiTacUnits: 0, minhUnits: 0, days: rows.length, lai: 0, lo: 0 };
   for (const r of rows) {
     s.profitUnits += r.profitUnits ?? 0;
     s.doiTacUnits += r.doiTacUnits ?? 0;
     s.minhUnits += r.minhUnits ?? 0;
-    s.wins += r.wins ?? 0;
-    s.losses += r.losses ?? 0;
-    s.count += r.count ?? 0;
+    if (r.profitUnits > 0) s.lai++;
+    else if (r.profitUnits < 0) s.lo++;
   }
   return s;
 }
@@ -181,55 +173,50 @@ export function dayLines(row) {
  */
 export function dayMessage(row) {
   const head = row.profitUnits >= 0 ? ':chart_with_upwards_trend:' : ':chart_with_downwards_trend:';
-  const detail = [
-    `${row.count} vị thế`,
-    row.wins ? `${row.wins} thắng` : null,
-    row.losses ? `${row.losses} thua` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
 
   return {
     text: `Chốt ngày ${dayLabel(row.day)}: ${fmt(row.profitUnits)}`,
     blocks: [
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: `${head} *Chốt ngày ${dayLabel(row.day)}*\n\`\`\`\n${dayLines(row).join('\n')}\n\`\`\`` },
+        text: {
+          type: 'mrkdwn',
+          text: `${head} *Chốt ngày ${dayLabel(row.day)}*\n\`\`\`\n${dayLines(row).join('\n')}\n\`\`\``,
+        },
       },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: detail || 'Không có vị thế nào tất toán trong ngày' }] },
+      ...(row.note ? [{ type: 'context', elements: [{ type: 'mrkdwn', text: row.note }] }] : []),
     ],
   };
 }
 
 /**
- * Cảnh báo khi có ngày không chốt được.
+ * Tin báo khi một ngày đã chốt bị sửa lại.
  *
- * MỘT tin cho cả lượt, không phải mỗi ngày một tin: hỏng kiểu thường gặp nhất
- * (khoá hết hạn, mất quyền) làm cả 7 ngày trong cửa sổ rà ngược cùng lỗi, mà 7
- * tin giống nhau thì đọc xong chẳng rõ hơn một tin.
- *
- * Tin này lặp lại mỗi đêm cho tới khi sửa xong — cố ý. Cảnh báo mà tự tắt là cảnh
- * báo bị bỏ lỡ. Nó tự hết om sòm mà không cần cơ chế gì thêm: ngày lỗi cũ dần rồi
- * rơi ra khỏi cửa sổ 7 ngày.
- *
- * KHÔNG kèm chi tiết kỹ thuật (tên sàn, mã lỗi) — cả kênh đọc được tin này, và sổ
- * này cố ý giữ từ ngữ trung tính. Nguyên văn lỗi nằm ở log Worker, xem bằng
- * `npx wrangler tail`.
+ * Sửa số phải BÁO LÊN KÊNH kèm cả số cũ, không được im lặng thay số: kênh đã nhận
+ * con số cũ rồi, đối tác có thể đã ghi lại hoặc đã trả tiền theo nó. Một dòng
+ * "trước ghi X" là thứ duy nhất giải thích được vì sao tổng tháng đổi.
  */
-export function alertMessage(errors) {
-  const days = errors.map((e) => dayLabel(e.day)).join(', ');
-  const text = `Chưa lấy được số liệu để chốt ${errors.length} ngày: ${days}`;
+export function correctionMessage(row, truocDo) {
+  const text = `Sửa ngày ${dayLabel(row.day)}: ${fmt(truocDo.profitUnits)} → ${fmt(row.profitUnits)}`;
 
   return {
     text,
     blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: `:warning: *${text}*` } },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `:pencil2: *${text}*\n\`\`\`\n${dayLines(row).join('\n')}\n\`\`\``,
+        },
+      },
       {
         type: 'context',
         elements: [
           {
             type: 'mrkdwn',
-            text: `Sửa xong thì gõ \`/note settle ${errors[0].day}\` để chốt bù · chi tiết lỗi xem \`wrangler tail\``,
+            text: [`Trước đó: ${fmt(truocDo.profitUnits)} · đối tác ${fmt(truocDo.doiTacUnits)}`, row.note]
+              .filter(Boolean)
+              .join(' · '),
           },
         ],
       },
