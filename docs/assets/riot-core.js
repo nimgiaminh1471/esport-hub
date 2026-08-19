@@ -117,11 +117,21 @@ export function createRiotGateway({
   function normalizeEvent(event) {
     if (!event) return null;
     const match = event.match ?? {};
+    const teams = (match.teams ?? []).map((t) => ({
+      id: t.id ?? null,
+      name: t.name ?? 'TBD',
+      code: t.code ?? '???',
+      image: secureUrl(t.image),
+      record: t.record ?? null, // {wins, losses}
+      wins: t.result?.gameWins ?? 0,
+      outcome: t.result?.outcome ?? null, // win | loss | null
+    }));
+
     return {
       game: id,
       id: String(match.id ?? event.id ?? ''),
       startTime: event.startTime,
-      state: event.state, // unstarted | inProgress | completed
+      state: fixState(event, teams), // unstarted | inProgress | completed
       blockName: event.blockName ?? null,
       league: {
         id: event.league?.id ?? null,
@@ -134,15 +144,7 @@ export function createRiotGateway({
         type: match.strategy?.type ?? 'bestOf',
         count: match.strategy?.count ?? 1,
       },
-      teams: (match.teams ?? []).map((t) => ({
-        id: t.id ?? null,
-        name: t.name ?? 'TBD',
-        code: t.code ?? '???',
-        image: secureUrl(t.image),
-        record: t.record ?? null, // {wins, losses}
-        wins: t.result?.gameWins ?? 0,
-        outcome: t.result?.outcome ?? null, // win | loss | null
-      })),
+      teams,
     };
   }
 
@@ -188,10 +190,29 @@ export function createRiotGateway({
       return events.filter((e) => e.state === 'inProgress');
     }
 
-    const data = await gw('getLive');
-    return (data?.data?.schedule?.events ?? [])
-      .filter((e) => e.type === 'match' || e.match)
-      .map((e) => normalizeEvent(e));
+    // Gộp thêm phần suy từ lịch, không chỉ tin endpoint getLive.
+    //
+    // Lý do: trận bị Riot gán sai `completed` (xem `fixState`) không nằm trong
+    // getLive, mà sau khi sửa state thì nó là `inProgress` — chỉ tin getLive thì
+    // trận đó rơi vào khe: không phải "sắp diễn ra" (đã qua giờ) mà cũng không
+    // vào "đang diễn ra". Đo được ở LPL ngày 19/08/2026.
+    const [data, schedule] = await Promise.all([
+      gw('getLive'),
+      getSchedule().catch(() => ({ events: [] })),
+    ]);
+
+    const byId = new Map();
+    for (const raw of data?.data?.schedule?.events ?? []) {
+      if (raw.type !== 'match' && !raw.match) continue;
+      const ev = normalizeEvent(raw);
+      if (ev?.id) byId.set(ev.id, ev);
+    }
+    // Endpoint getLive được ưu tiên, lịch chỉ bù thêm trận nó bỏ sót.
+    for (const ev of schedule.events) {
+      if (ev.state === 'inProgress' && !byId.has(ev.id)) byId.set(ev.id, ev);
+    }
+
+    return [...byId.values()].sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime));
   }
 
   /**
@@ -359,6 +380,44 @@ export function createRiotGateway({
     getStandings,
     getLeagueHistory,
   };
+}
+
+/**
+ * Trận nói `completed` mà chưa có kết quả thì cửa sổ này còn coi là đang chờ.
+ * 12 giờ thừa sức phủ một Bo5 kèm mọi kiểu hoãn giữa giải.
+ */
+const NO_RESULT_GRACE_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Sửa lại `state` khi Riot nói `completed` nhưng chẳng có kết quả nào.
+ *
+ * Đo thực tế 19/08/2026: cả 3 trận LPL trong ngày đều mang `state: "completed"`
+ * trong khi `gameWins` là 0–0, `outcome` là null, và `getEventDetails` báo cả 3
+ * ván `unstarted` — hai trận thậm chí còn CHƯA tới giờ đá. LCK cùng ngày vẫn
+ * đúng, nên đây là lỗi dữ liệu riêng của LPL, không phải quy ước mới.
+ *
+ * Hậu quả nếu tin theo: `getUpcoming` chỉ nhận `unstarted` nên cả giải LPL biến
+ * mất khỏi web, khỏi `/lol schedule`, và bot cũng không bao giờ báo.
+ *
+ * Nên khi kết quả rỗng thì suy state theo thời gian thay vì tin `completed`:
+ *   - chưa tới giờ            -> unstarted
+ *   - vừa qua giờ, trong 12h  -> inProgress
+ *   - quá 12h                 -> giữ completed
+ *
+ * Cái chốt 12 giờ là để tránh làm hỏng chiều còn lại: trận bị huỷ hoặc xử thua
+ * từ nhiều tháng trước cũng có kết quả rỗng, mà gọi nó là "đang diễn ra" mãi thì
+ * còn sai hơn cả cái nó đang chữa.
+ */
+function fixState(event, teams) {
+  if (event.state !== 'completed') return event.state;
+  if (teams.some((t) => t.wins > 0 || t.outcome)) return event.state;
+
+  const startsAt = Date.parse(event.startTime ?? '');
+  if (!Number.isFinite(startsAt)) return event.state;
+
+  const now = Date.now();
+  if (startsAt > now) return 'unstarted';
+  return now - startsAt < NO_RESULT_GRACE_MS ? 'inProgress' : event.state;
 }
 
 /**

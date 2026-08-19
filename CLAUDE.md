@@ -241,6 +241,20 @@ straight to the finished message — one lost message, never wrong data.
   dropping `startingTime`; that shows 0/0/0 as if it were real data. `feedGet` maps this 404
   to `null`, remembers the game in `isStatsDisabled(gameId)` so callers stop polling, and
   still throws on the other 404 (`"does not exist"`, i.e. a wrong id).
+- **Riot sometimes reports `completed` for matches that have not been played.** Measured
+  2026-08-19: all three LPL matches that day carried `state: "completed"` while `gameWins` was
+  0–0, `outcome` was null, and `getEventDetails` reported every game `unstarted` — two had not
+  even reached their start time. LCK the same day was correct, so it is a per-league data fault,
+  not a new convention. Left alone it deletes a whole league from the site, from
+  `/lol schedule` and from the notifier, because `getUpcoming` only accepts `unstarted`.
+  `fixState()` in `riot-core.js` recomputes the state from the clock whenever the result is
+  empty: future → `unstarted`, started within 12h → `inProgress`, older → keep `completed`.
+  The 12-hour bound matters — a match cancelled months ago also has an empty result, and calling
+  that "live" forever would be worse than the bug being fixed.
+- **`getLive` alone is not enough for LoL.** A match Riot mislabels never appears in `getLive`,
+  so after `fixState` corrects it to `inProgress` it would fall between the two lists: too late
+  for "upcoming", absent from "live". `getLive` therefore merges the native endpoint with
+  `inProgress` events derived from `getSchedule`, native taking precedence, deduped by id.
 - `API_KEY` in `lol-core.js` is the public key lolesports.com itself ships to browsers. It is
   intentionally committed and must be in client code — it is not a leaked secret.
 - Riot returns image URLs over `http://`; `secureUrl()` rewrites the scheme so GitHub Pages
