@@ -45,16 +45,16 @@
       "updatedAt": "2026-08-19T12:58:09.485Z"
     },
     "116889604984157261": {
-      "state": "unstarted",
+      "state": "completed",
       "slackTs": "1787201253.411129",
       "announcedAt": "2026-08-20T04:47:33.486Z",
-      "updatedAt": "2026-08-20T04:47:33.486Z"
+      "updatedAt": "2026-08-21T07:29:02.266Z"
     },
     "116889604984222901": {
-      "state": "unstarted",
+      "state": "completed",
       "slackTs": "1787201253.581749",
       "announcedAt": "2026-08-20T04:47:33.659Z",
-      "updatedAt": "2026-08-20T04:47:33.659Z"
+      "updatedAt": "2026-08-21T07:29:02.540Z"
     },
     "116566854547769752": {
       "state": "completed",
@@ -75,22 +75,22 @@
       "updatedAt": "2026-08-20T13:16:25.960Z"
     },
     "116889604984222917": {
-      "state": "unstarted",
+      "state": "completed",
       "slackTs": "1787287453.521459",
       "announcedAt": "2026-08-21T04:44:13.584Z",
-      "updatedAt": "2026-08-21T04:44:13.584Z"
+      "updatedAt": "2026-08-21T07:29:02.855Z"
     },
     "116889604984157281": {
-      "state": "unstarted",
+      "state": "completed",
       "slackTs": "1787287453.626729",
       "announcedAt": "2026-08-21T04:44:13.658Z",
-      "updatedAt": "2026-08-21T04:44:13.658Z"
+      "updatedAt": "2026-08-21T07:29:03.130Z"
     },
     "116566854547835300": {
-      "state": "unstarted",
+      "state": "inProgress",
       "slackTs": "1787294297.620589",
       "announcedAt": "2026-08-21T06:38:17.708Z",
-      "updatedAt": "2026-08-21T06:38:17.708Z"
+      "updatedAt": "2026-08-21T07:29:03.388Z"
     }
   }
 }
