@@ -87,16 +87,16 @@
       "updatedAt": "2026-08-21T18:13:27.474Z"
     },
     "115581261721707065": {
-      "state": "inProgress",
+      "state": "completed",
       "slackTs": "1787334130.923699",
       "announcedAt": "2026-08-21T17:42:10.975Z",
-      "updatedAt": "2026-08-21T18:13:27.646Z"
+      "updatedAt": "2026-08-21T21:09:32.779Z"
     },
     "115581239610450176": {
-      "state": "unstarted",
+      "state": "inProgress",
       "slackTs": "1787345140.841319",
       "announcedAt": "2026-08-21T20:45:40.915Z",
-      "updatedAt": "2026-08-21T20:45:40.916Z"
+      "updatedAt": "2026-08-21T21:09:32.965Z"
     }
   }
 }
