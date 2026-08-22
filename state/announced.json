@@ -123,16 +123,16 @@
       "updatedAt": "2026-08-22T07:58:42.581Z"
     },
     "115548147900619049": {
-      "state": "inProgress",
+      "state": "completed",
       "slackTs": "1787384101.587259",
       "announcedAt": "2026-08-22T07:35:01.648Z",
-      "updatedAt": "2026-08-22T07:58:42.685Z"
+      "updatedAt": "2026-08-22T10:55:26.367Z"
     },
     "116566854547835332": {
-      "state": "inProgress",
+      "state": "completed",
       "slackTs": "1787388014.971179",
       "announcedAt": "2026-08-22T08:40:14.998Z",
-      "updatedAt": "2026-08-22T09:03:54.841Z"
+      "updatedAt": "2026-08-22T10:55:26.455Z"
     },
     "116769742220520943": {
       "state": "inProgress",
@@ -141,10 +141,10 @@
       "updatedAt": "2026-08-22T09:03:54.937Z"
     },
     "115548147900750241": {
-      "state": "unstarted",
+      "state": "inProgress",
       "slackTs": "1787391462.827959",
       "announcedAt": "2026-08-22T09:37:42.902Z",
-      "updatedAt": "2026-08-22T09:37:42.902Z"
+      "updatedAt": "2026-08-22T10:55:26.546Z"
     },
     "116566854547769692": {
       "state": "unstarted",
